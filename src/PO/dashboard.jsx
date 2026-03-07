@@ -670,7 +670,7 @@ const handleDeleteYear = async (yearToDelete) => {
   }
 };
   
-  const statuses = ["Verified", "Draft", "Incomplete"];
+  const statuses = ["Verified", "Pending"];
 
   const updateFilter = (type, value) => {
     setFilters({ ...filters, [type]: value });
