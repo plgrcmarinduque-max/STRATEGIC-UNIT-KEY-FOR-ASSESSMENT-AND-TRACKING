@@ -852,45 +852,14 @@ const handleSignOut = () => {
                 </div>
                 {openDropdown === "status" && renderDropdown("status", statuses)}
               </div>
-<button
-  className={style.sidebarMenuItem}
-  onClick={() => navigate("/mlgo-notification")}
-  style={{
-    display: "flex",
-    alignItems: "center",
-    width: "100%",
-    padding: "10px",
-    background: "none",
-    border: "none",
-    color: "white",
-    cursor: "pointer",
-    transition: "background-color 0.2s ease",
-    position: "relative"
-  }}
-  onMouseEnter={(e) => {
-    e.currentTarget.style.backgroundColor = "rgba(255, 255, 255, 0.28)";
-    e.currentTarget.style.borderRadius = "4px";
-  }}
-  onMouseLeave={(e) => {
-    e.currentTarget.style.backgroundColor = "transparent";
-  }}
->
-  <FiBell style={{ marginRight: "8px", fontSize: "18px" }} />
-  Notifications
-  {unreadCount > 0 && (
-    <span style={{
-      backgroundColor: "#dc3545",
-      color: "white",
-      borderRadius: "12px",
-      padding: "2px 8px",
-      fontSize: "11px",
-      marginLeft: "8px",
-      fontWeight: "bold"
-    }}>
-      {unreadCount}
-    </span>
-  )}
-</button>
+
+                            <button
+                              className={style.sidebarMenuItem}
+                              onClick={() => navigate("/mlgo-notification")}
+                            >
+                              <FiBell style={{ marginRight: "8px", fontSize: "18px" }} />
+                              Notifications
+                            </button>
 
                 <div className="sidebar-bottom">
                 <button className="sidebar-btn signout-btn" onClick={handleSignOut}>
