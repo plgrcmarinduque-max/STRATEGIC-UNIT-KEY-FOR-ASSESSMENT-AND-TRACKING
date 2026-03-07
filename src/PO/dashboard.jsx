@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { db, auth} from "src/firebase";
 import "src/PO-CSS/dashboard.css";
 import dilgLogo from "src/assets/dilg-po.png";
@@ -316,7 +316,7 @@ Object.keys(allVerified).forEach(year => {
   };
 
   fetchVerifiedData();
-}, [auth.currentUser?.uid]);
+}, [auth.currentUser?.uid, subAdminMunicipalities]);
 
 useEffect(() => {
   if (!auth.currentUser) return;
@@ -391,7 +391,8 @@ if (municipality === "Unknown") {
               deadline: item.deadline || "-",
               lguUid: item.lguUid || "No UID",
               submittedBy: item.submittedBy || "Unknown",
-              userRole: item.userRole || "Unknown"
+              userRole: item.userRole || "Unknown",
+              originalData: item.originalData || {}
             });
           });
           
@@ -694,18 +695,32 @@ const handleDeleteYear = async (yearToDelete) => {
   };
 
 
-// Combine forwardedData and verifiedData for display
-const allData = [...(forwardedData || []), ...(verifiedData || [])];
-
-// Sort by date (most recent first) - optional
-const sortedData = allData.sort((a, b) => {
-  const dateA = a.submission ? new Date(a.submission) : new Date(0);
-  const dateB = b.submission ? new Date(b.submission) : new Date(0);
-  return dateB - dateA;
-});
+// ===== ADD THE VERIFIED FILTERING LOGIC HERE (ONLY CHANGE) =====
+// Combine forwardedData and verifiedData for display, removing verified items from forwarded
+const allData = useMemo(() => {
+  // Create a Set of verified item keys for quick lookup
+  const verifiedKeys = new Set(
+    verifiedData.map(v => `${v.year}-${v.lguUid}`)
+  );
+  
+  // Filter out forwarded items that have been verified
+  const filteredForwarded = forwardedData.filter(item => 
+    !verifiedKeys.has(`${item.year}-${item.lguUid}`)
+  );
+  
+  // Combine filtered forwarded with verified
+  const combined = [...filteredForwarded, ...verifiedData];
+  
+  // Sort by date (most recent first)
+  return combined.sort((a, b) => {
+    const dateA = a.submission ? new Date(a.submission) : new Date(0);
+    const dateB = b.submission ? new Date(b.submission) : new Date(0);
+    return dateB - dateA;
+  });
+}, [forwardedData, verifiedData]);
 
 // Remove duplicates based on lguUid and year and type
-const uniqueData = sortedData.filter((item, index, self) => 
+const uniqueData = allData.filter((item, index, self) => 
   index === self.findIndex((t) => 
     t.lguUid === item.lguUid && 
     t.year === item.year && 

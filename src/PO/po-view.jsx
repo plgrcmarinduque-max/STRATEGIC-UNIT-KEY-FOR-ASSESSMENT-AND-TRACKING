@@ -1711,9 +1711,6 @@ return (
   const answerKey = getAnswerKey(record, index, main.title);
   const answer = lgu.data?.[answerKey];
   
-  // Debug log
-  console.log(`Looking for answer with key: ${answerKey}`, answer);
-  
   return (
     <div key={index} className="reference-wrapper">
       {/* Indicator Row */}
@@ -1725,11 +1722,13 @@ return (
         <div className="mainreference-field">
           <div className="field-content">
             
+            {/* Multiple Choice - FIXED: Add unique name */}
             {main.fieldType === "multiple" &&
               main.choices.map((choice, i) => (
                 <div key={i}>
                   <input 
                     type="radio" 
+                    name={`${record.firebaseKey}_${index}_${main.title}`} // Unique name for this main indicator
                     checked={answer?.value === choice}
                     disabled 
                   /> 
@@ -1739,6 +1738,7 @@ return (
                 </div>
               ))}
             
+            {/* Checkbox - No need for unique name */}
             {main.fieldType === "checkbox" &&
               main.choices.map((choice, i) => {
                 const checkboxKey = getAnswerKey(record, index, `${main.title}_${i}`);
@@ -1857,11 +1857,13 @@ return (
 
         <div className="reference-field">
           
+          {/* Multiple Choice - FIXED: Add unique name */}
           {sub.fieldType === "multiple" &&
             sub.choices.map((choice, i) => (
               <div key={i}>
                 <input 
                   type="radio" 
+                  name={`${record.firebaseKey}_sub_${index}_${sub.title}`} // Unique name for this sub-indicator
                   checked={answer?.value === choice}
                   disabled 
                 /> 
@@ -1871,6 +1873,7 @@ return (
               </div>
             ))}
           
+          {/* Checkbox - No need for unique name */}
           {sub.fieldType === "checkbox" &&
             sub.choices.map((choice, i) => {
               const checkboxKey = getAnswerKey(record, index, `${sub.title}_${i}`, true);
@@ -1988,7 +1991,7 @@ return (
               padding: "8px 12px",
               background: "#ffffff"
             }}>
-              {/* Nested Multiple Choice */}
+              {/* Nested Multiple Choice - FIXED: Add unique name */}
               {nested.fieldType === "multiple" && nested.choices?.map((choice, i) => {
                 const nestedChoiceKey = getAnswerKey(record, index, nested.title, true, nestedIndex);
                 const isSelected = lgu.data?.[nestedChoiceKey]?.value === choice;
@@ -1997,6 +2000,7 @@ return (
                   <div key={i} style={{ marginBottom: "4px" }}>
                     <input 
                       type="radio" 
+                      name={`${record.firebaseKey}_sub_${index}_nested_${nestedIndex}_${nested.title}`} // Unique name
                       checked={isSelected}
                       disabled 
                     /> 

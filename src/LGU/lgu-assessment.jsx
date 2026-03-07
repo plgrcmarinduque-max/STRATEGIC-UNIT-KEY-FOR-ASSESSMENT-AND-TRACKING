@@ -530,146 +530,147 @@ const handleAnswerChange = (indicatorKey, mainIndex, field, value) => {
   }));
 };
 
-  // Handle save answers
-  const handleSaveAnswers = async () => {
-    const hasForwardingFlags = 
-      metadata?.forwardedToPO === true || 
-      metadata?.forwarded === true ||
-      metadata?.forwardedAt || 
-      metadata?.forwardedBy ||
-      metadata?.forwardedTo;
-    
-    if (hasForwardingFlags) {
-      alert("This assessment has been forwarded and cannot be edited or submitted.");
-      return;
-    }
-    
-    if (!auth.currentUser || !selectedYearDisplay) return;
-    
-    setSavingAnswers(true);
+// In lgu-assessment.jsx, update the handleSaveAnswers function
+const handleSaveAnswers = async () => {
+  const hasForwardingFlags = 
+    metadata?.forwardedToPO === true || 
+    metadata?.forwarded === true ||
+    metadata?.forwardedAt || 
+    metadata?.forwardedBy ||
+    metadata?.forwardedTo;
+  
+  if (hasForwardingFlags) {
+    alert("This assessment has been forwarded and cannot be edited or submitted.");
+    return;
+  }
+  
+  if (!auth.currentUser || !selectedYearDisplay) return;
+  
+  setSavingAnswers(true);
 
-    try {
-      const userName = profileData.name || auth.currentUser.email || "Anonymous";
-      const cleanName = userName.replace(/[.#$\[\]]/g, '_');
+  try {
+    const userName = profileData.name || auth.currentUser.email || "Anonymous";
+    const cleanName = userName.replace(/[.#$\[\]]/g, '_');
+    
+    const usersRef = ref(db, "users");
+    const usersSnapshot = await get(usersRef);
+    
+    if (usersSnapshot.exists()) {
+      const users = usersSnapshot.val();
+      let adminUid = Object.keys(users).find(
+        uid => users[uid]?.role === "admin"
+      );
       
-      const usersRef = ref(db, "users");
-      const usersSnapshot = await get(usersRef);
+      if (!adminUid) {
+        const financialRootRef = ref(db, "financial");
+        const financialRootSnapshot = await get(financialRootRef);
+        
+        if (financialRootSnapshot.exists()) {
+          const financialData = financialRootSnapshot.val();
+          adminUid = Object.keys(financialData).find(uid => 
+            financialData[uid] && financialData[uid][selectedYearDisplay]
+          );
+        }
+      }
       
-      if (usersSnapshot.exists()) {
-        const users = usersSnapshot.val();
-        let adminUid = Object.keys(users).find(
-          uid => users[uid]?.role === "admin"
+      if (adminUid) {
+        const answersRef = ref(
+          db,
+          `answers/${selectedYearDisplay}/LGU/${cleanName}`
         );
         
-        if (!adminUid) {
-          const financialRootRef = ref(db, "financial");
-          const financialRootSnapshot = await get(financialRootRef);
-          
-          if (financialRootSnapshot.exists()) {
-            const financialData = financialRootSnapshot.val();
-            adminUid = Object.keys(financialData).find(uid => 
-              financialData[uid] && financialData[uid][selectedYearDisplay]
-            );
+        const answerData = {
+          ...userAnswers,
+          _metadata: {
+            uid: auth.currentUser.uid,
+            email: auth.currentUser.email,
+            name: profileData.name || auth.currentUser.email,
+            municipality: profileData.municipality, // CRITICAL: Add this line
+            lastSaved: Date.now(),
+            submitted: true,
+            year: selectedYearDisplay,
+            sections: {
+              financial: true,
+              disaster: true,
+              social: true,
+              health: true,
+              education: true,
+              business: true,
+              safety: true,
+              environmental: true,
+              tourism: true,
+              youth: true
+            }
           }
+        };
+        
+        await set(answersRef, answerData);
+        
+        if (Object.keys(attachments).length > 0) {
+          const attachmentsRef = ref(
+            db,
+            `attachments/${selectedYearDisplay}/LGU/${cleanName}`
+          );
+          await set(attachmentsRef, attachments);
         }
         
-        if (adminUid) {
-          const answersRef = ref(
-            db,
-            `answers/${selectedYearDisplay}/LGU/${cleanName}`
-          );
+        const userMunicipality = profileData.municipality;
+        
+        const allUsersRef = ref(db, "users");
+        const allUsersSnapshot = await get(allUsersRef);
+        let mlgoUid = null;
+        
+        if (allUsersSnapshot.exists()) {
+          const allUsers = allUsersSnapshot.val();
           
-          const answerData = {
-            ...userAnswers,
-            _metadata: {
-              uid: auth.currentUser.uid,
-              email: auth.currentUser.email,
-              name: profileData.name || auth.currentUser.email,
-              lastSaved: Date.now(),
-              submitted: true,
-              year: selectedYearDisplay,
-              sections: {
-                financial: true,
-                disaster: true,
-                social: true,
-                health: true,
-                education: true,
-                business: true,
-                safety: true,
-                environmental: true,
-                tourism: true,
-                youth: true
-              }
-            }
-          };
-          
-          await set(answersRef, answerData);
-          
-          if (Object.keys(attachments).length > 0) {
-            const attachmentsRef = ref(
-              db,
-              `attachments/${selectedYearDisplay}/LGU/${cleanName}`
-            );
-            await set(attachmentsRef, attachments);
-          }
-          
-          const userMunicipality = profileData.municipality;
-          
-          const allUsersRef = ref(db, "users");
-          const allUsersSnapshot = await get(allUsersRef);
-          let mlgoUid = null;
-          
-          if (allUsersSnapshot.exists()) {
-            const allUsers = allUsersSnapshot.val();
-            
-            for (const [uid, userData] of Object.entries(allUsers)) {
-              if (userData.role === "sub-admin") {
-                const profileRef = ref(db, `profiles/${uid}`);
-                const profileSnapshot = await get(profileRef);
-                
-                if (profileSnapshot.exists()) {
-                  const profile = profileSnapshot.val();
-                  if (profile.municipality === userMunicipality) {
-                    mlgoUid = uid;
-                    break;
-                  }
+          for (const [uid, userData] of Object.entries(allUsers)) {
+            if (userData.role === "sub-admin") {
+              const profileRef = ref(db, `profiles/${uid}`);
+              const profileSnapshot = await get(profileRef);
+              
+              if (profileSnapshot.exists()) {
+                const profile = profileSnapshot.val();
+                if (profile.municipality === userMunicipality) {
+                  mlgoUid = uid;
+                  break;
                 }
               }
             }
           }
-          
-          if (mlgoUid) {
-            const notificationRef = ref(db, `notifications/${selectedYearDisplay}/MLGO/${mlgoUid}`);
-            const notificationId = Date.now().toString();
-            const notificationData = {
-              id: notificationId,
-              type: "assessment_submitted",
-              title: `Assessment Form (${selectedYearDisplay}) has been submitted by LGU.`,
-              message: `Assessment from ${profileData.name || auth.currentUser.email} has been submitted.`,
-              from: auth.currentUser?.email,
-              fromName: profileData.name || auth.currentUser?.email,
-              timestamp: Date.now(),
-              read: false,
-              year: selectedYearDisplay,
-              municipality: userMunicipality,
-              action: "view_assessment"
-            };
-            
-            await set(ref(db, `notifications/${selectedYearDisplay}/MLGO/${mlgoUid}/${notificationId}`), notificationData);
-          }
-          
-          setHasSubmitted(true);
-          clearDraft();
-          alert("All sections submitted successfully!");
         }
+        
+        if (mlgoUid) {
+          const notificationRef = ref(db, `notifications/${selectedYearDisplay}/MLGO/${mlgoUid}`);
+          const notificationId = Date.now().toString();
+          const notificationData = {
+            id: notificationId,
+            type: "assessment_submitted",
+            title: `Assessment Form (${selectedYearDisplay}) has been submitted by LGU.`,
+            message: `Assessment from ${profileData.name || auth.currentUser.email} has been submitted.`,
+            from: auth.currentUser?.email,
+            fromName: profileData.name || auth.currentUser?.email,
+            timestamp: Date.now(),
+            read: false,
+            year: selectedYearDisplay,
+            municipality: userMunicipality,
+            action: "view_assessment"
+          };
+          
+          await set(ref(db, `notifications/${selectedYearDisplay}/MLGO/${mlgoUid}/${notificationId}`), notificationData);
+        }
+        
+        setHasSubmitted(true);
+        clearDraft();
+        alert("All sections submitted successfully!");
       }
-    } catch (error) {
-      console.error("Error submitting answers:", error);
-      alert("Failed to submit answers: " + error.message);
-    } finally {
-      setSavingAnswers(false);
     }
-  };
+  } catch (error) {
+    console.error("Error submitting answers:", error);
+    alert("Failed to submit answers: " + error.message);
+  } finally {
+    setSavingAnswers(false);
+  }
+};
 
   // Export PDF functions (keep your existing ones)
   const exportFinancialPDF = async () => {
