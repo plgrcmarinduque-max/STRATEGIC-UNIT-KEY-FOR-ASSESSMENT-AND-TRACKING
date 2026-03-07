@@ -139,11 +139,22 @@ const addMainIndicator = () => {
 
 // Open modal to edit a specific record
 const handleEditRecord = (record) => {
-  setMainIndicators(record.mainIndicators || []);
-  setSubIndicators(record.subIndicators || []);
-  setShowModal(true);
+  // Make deep copies of the indicators to avoid reference issues
+  const mainIndicatorsCopy = record.mainIndicators ? 
+    record.mainIndicators.map(main => ({
+      ...main,
+      choices: main.choices ? [...main.choices] : []
+    })) : [];
+  
+  const subIndicatorsCopy = record.subIndicators ? 
+    record.subIndicators.map(sub => ({
+      ...sub,
+      choices: sub.choices ? [...sub.choices] : []
+    })) : [];
 
-  // Store the Firebase key of the record being edited
+  setMainIndicators(mainIndicatorsCopy);
+  setSubIndicators(subIndicatorsCopy);
+  setShowModal(true);
   setEditRecordKey(record.firebaseKey);
 };
 
@@ -215,6 +226,7 @@ const updateMainChoice = (mainId, index, value) => {
   setMainIndicators((prev) =>
     prev.map((main) => {
       if (main.id === mainId) {
+        // Create a new array for choices to ensure React detects the change
         const updatedChoices = [...main.choices];
         updatedChoices[index] = value;
         return { ...main, choices: updatedChoices };
@@ -442,14 +454,15 @@ const handleSignOut = () => {
 
   // Handler to update choices for multiple or checkbox types
   const updateChoice = (subId, index, value) => {
-    setSubIndicators((prev) =>
-      prev.map((sub) => {
-        if (sub.id === subId) {
-          const updatedChoices = [...sub.choices];
-          updatedChoices[index] = value;
-          return { ...sub, choices: updatedChoices };
-        }
-        return sub;
+  setSubIndicators((prev) =>
+    prev.map((sub) => {
+      if (sub.id === subId) {
+        // Create a new array for choices to ensure React detects the change
+        const updatedChoices = [...sub.choices];
+        updatedChoices[index] = value;
+        return { ...sub, choices: updatedChoices };
+      }
+      return sub;
       })
     );
   };
