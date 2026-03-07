@@ -512,19 +512,23 @@ export default function LGU() {
   }, [selectedYearDisplay, db]);
 
   // Handle answer change
-  const handleAnswerChange = (indicatorKey, mainIndex, field, value) => {
-    setUserAnswers(prev => ({
-      ...prev,
-      [`${activeTab}_${indicatorKey}_${mainIndex}_${field}`]: {
-        category: activeTab,
-        indicatorKey,
-        mainIndex,
-        field,
-        value,
-        timestamp: Date.now()
-      }
-    }));
-  };
+// Handle answer change
+const handleAnswerChange = (indicatorKey, mainIndex, field, value) => {
+  // Check if assessment is locked
+  if (hasSubmitted || metadata?.forwardedToPO) return;
+  
+  setUserAnswers(prev => ({
+    ...prev,
+    [`${activeTab}_${indicatorKey}_${mainIndex}_${field}`]: {
+      category: activeTab,
+      indicatorKey,
+      mainIndex,
+      field,
+      value,
+      timestamp: Date.now()
+    }
+  }));
+};
 
   // Handle save answers
   const handleSaveAnswers = async () => {
@@ -1264,732 +1268,798 @@ export default function LGU() {
               </button>
             </div>
 
-            {/* Form Section */}
-            <div className={styles.lgutableBox}>
-              <div className={styles.scrollableContent}
-                style={{ 
-                  maxHeight: sidebarOpen ? '57vh' : '63vh',
-                }}
-              >
-                {/* Return Remarks Display */}
-                {hasSubmitted === false && metadata?.returned && (
-                  <div style={{
-                    backgroundColor: "#fff3cd",
-                    border: "1px solid #ffeeba",
-                    borderRadius: "8px",
-                    padding: "15px",
-                    marginBottom: "20px",
-                    color: "#856404",
-                    width: "100%"
+{/* Form Section */}
+<div className={styles.lgutableBox}>
+  <div className={styles.scrollableContent}
+    style={{ 
+      maxHeight: sidebarOpen ? '57vh' : '63vh',
+    }}
+  >
+    {/* Return Remarks Display */}
+    {hasSubmitted === false && metadata?.returned && (
+      <div style={{
+        backgroundColor: "#fff3cd",
+        border: "1px solid #ffeeba",
+        borderRadius: "8px",
+        padding: "15px",
+        marginBottom: "20px",
+        color: "#856404",
+        width: "100%"
+      }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px" }}>
+          <span style={{ fontSize: "18px" }}>📝</span>
+          <strong>Remarks from MLGOO:</strong>
+        </div>
+        <p style={{ margin: "0 0 0 25px", fontSize: "14px" }}>
+          {metadata?.remarks || "Please review and resubmit."}
+        </p>
+      </div>
+    )}
+
+    {currentIndicators.length === 0 ? (
+      <p style={{ textAlign: "center", marginTop: "20px" }}>
+        No indicators added yet for {categoryTitle} in {selectedYearDisplay || "selected year"}.
+      </p>
+    ) : (
+      <>
+        {currentIndicators.map((record) => (
+          <div key={record.firebaseKey} className="reference-wrapper">
+            
+            {/* Main Indicators */}
+            {record.mainIndicators?.map((main, index) => {
+              const answerKey = `${activeTab}_${record.firebaseKey}_${index}_${main.title}`;
+              const answer = userAnswers[answerKey];
+              
+              return (
+                <div key={index} className="reference-wrapper">
+                  {/* Indicator Row - Exact style from po-view with blue shade */}
+                  <div className="reference-row" style={{
+                    display: "flex",
+                    border: "1px solid #cfcfcf",
+                    marginBottom: "0"
                   }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px" }}>
-                      <span style={{ fontSize: "18px" }}>📝</span>
-                      <strong>Remarks from MLGOO:</strong>
+                    <div className="reference-label" style={{
+                      width: "45%",
+                      background: "#e6f0fa", // Light blue shade as in po-view
+                      padding: "12px 12px",
+                      fontWeight: 500,
+                      borderRight: "1px solid #cfcfcf",
+                      color: "#0c1a4b" // Dark blue text
+                    }}>
+                      {main.title}
                     </div>
-                    <p style={{ margin: "0 0 0 25px", fontSize: "14px" }}>
-                      {metadata?.remarks || "Please review and resubmit."}
-                    </p>
+
+                    <div className="mainreference-field" style={{
+                      width: "55%",
+                      padding: "8px 12px",
+                      background: "#ffffff"
+                    }}>
+                      <div className="field-content">
+                        {main.fieldType === "multiple" &&
+                          main.choices.map((choice, i) => {
+                            const isSelected = answer?.value === choice;
+                            
+                            return (
+                              <div key={i} style={{ marginBottom: "4px" }}>
+                                <input 
+                                  type="radio" 
+                                  name={`${record.firebaseKey}_${index}`}
+                                  value={choice}
+                                  checked={isSelected}
+                                  onChange={(e) => handleAnswerChange(
+                                    record.firebaseKey,
+                                    index,
+                                    main.title,
+                                    e.target.value
+                                  )}
+                                  disabled={hasSubmitted || metadata?.forwardedToPO}
+                                /> 
+                                <span style={{ marginLeft: "4px" }}>
+                                  {choice || <span style={{ fontStyle: "italic", color: "gray" }}>Empty Option</span>}
+                                </span>
+                              </div>
+                            );
+                          })}
+
+                        {main.fieldType === "checkbox" &&
+                          main.choices.map((choice, i) => {
+                            const checkboxKey = `${activeTab}_${record.firebaseKey}_${index}_${main.title}_${i}`;
+                            const isChecked = userAnswers[checkboxKey]?.value === true;
+                            
+                            return (
+                              <div key={i} style={{ marginBottom: "4px" }}>
+                                <input 
+                                  type="checkbox" 
+                                  checked={isChecked}
+                                  onChange={(e) => handleAnswerChange(
+                                    record.firebaseKey,
+                                    index,
+                                    `${main.title}_${i}`,
+                                    e.target.checked
+                                  )}
+                                  disabled={hasSubmitted || metadata?.forwardedToPO}
+                                /> 
+                                <span style={{ marginLeft: "4px" }}>
+                                  {choice || <span style={{ fontStyle: "italic", color: "gray" }}>Empty Option</span>}
+                                </span>
+                              </div>
+                            );
+                          })}
+
+                        {main.fieldType === "short" && (
+                          <input
+                            type="text"
+                            style={{ width: "100%", padding: "6px", borderRadius: "4px", border: "1px solid #ccc" }}
+                            placeholder="Enter your answer..."
+                            value={answer?.value || ""}
+                            onChange={(e) => handleAnswerChange(
+                              record.firebaseKey,
+                              index,
+                              main.title,
+                              e.target.value
+                            )}
+                            disabled={hasSubmitted || metadata?.forwardedToPO}
+                          />
+                        )}
+
+                        {main.fieldType === "integer" && (
+                          <input
+                            type="number"
+                            style={{ width: "100%", padding: "6px", borderRadius: "4px", border: "1px solid #ccc" }}
+                            placeholder="Enter a number..."
+                            value={answer?.value || ""}
+                            onChange={(e) => handleAnswerChange(
+                              record.firebaseKey,
+                              index,
+                              main.title,
+                              e.target.value
+                            )}
+                            disabled={hasSubmitted || metadata?.forwardedToPO}
+                          />
+                        )}
+
+                        {main.fieldType === "date" && (
+                          <input
+                            type="date"
+                            style={{ width: "100%", padding: "6px", borderRadius: "4px", border: "1px solid #ccc" }}
+                            value={answer?.value || ""}
+                            onChange={(e) => handleAnswerChange(
+                              record.firebaseKey,
+                              index,
+                              main.title,
+                              e.target.value
+                            )}
+                            disabled={hasSubmitted || metadata?.forwardedToPO}
+                          />
+                        )}
+                      </div>
+                    </div>
                   </div>
-                )}
 
-                {currentIndicators.length === 0 ? (
-                  <p style={{ textAlign: "center", marginTop: "20px" }}>
-                    No indicators added yet for {categoryTitle} in {selectedYearDisplay || "selected year"}.
-                  </p>
-                ) : (
-                  <>
-                    {currentIndicators.map((record) => (
-                      <div key={record.firebaseKey} className="reference-wrapper">
-                        {/* Main Indicators */}
-                        {record.mainIndicators?.map((main, index) => (
-                          <div key={index} className="reference-wrapper">
-                            <div className="reference-row">
-                              <div className="reference-label">{main.title}</div>
+                  {/* Mode of Verification with Attachments - Exact style from po-view */}
+                  {main.verification && (
+                    <div className="reference-verification-full" style={{ 
+                      display: "flex",
+                      flexDirection: "column",
+                      width: "100%"
+                    }}>
+                      <div style={{ 
+                        display: "flex", 
+                        justifyContent: "space-between", 
+                        alignItems: "center",
+                        width: "100%",
+                        gap: "10px",
+                        padding: "3px 12px",
+                        background: "#ffffff",
+                        borderTop: "none",
+                      }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: "5px", flexWrap: "wrap" }}>
+                          <span style={{ fontWeight: 700, marginRight: "6px", color: "#081a4b" }}>Mode of Verification:</span>
+                          <span style={{ fontStyle: "italic" }}>{main.verification}</span>
+                        </div>
+                        
+                        {!hasSubmitted && (
+                          <button
+                            onClick={() => triggerFileUpload(record.firebaseKey, index, main.title)}
+                            disabled={uploadingFile}
+                            style={{
+                              backgroundColor: "#840000",
+                              color: "white",
+                              border: "none",
+                              padding: "4px 10px",
+                              borderRadius: "4px",
+                              fontSize: "11px",
+                              cursor: uploadingFile ? "not-allowed" : "pointer",
+                              fontWeight: "600",
+                              display: "flex",
+                              alignItems: "center",
+                              gap: "4px",
+                              opacity: uploadingFile ? 0.6 : 1,
+                              whiteSpace: "nowrap"
+                            }}
+                          >
+                            {uploadingFile ? "⏳" : "+"} {uploadingFile ? "Uploading..." : "Add Attachment"}
+                          </button>
+                        )}
+                        
+                        {hasSubmitted && (
+                          <span style={{
+                            backgroundColor: "#4CAF50",
+                            color: "white",
+                            padding: "4px 10px",
+                            borderRadius: "4px",
+                            fontSize: "11px",
+                            fontWeight: "600",
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "4px",
+                            whiteSpace: "nowrap"
+                          }}>
+                            ✓ Submitted
+                          </span>
+                        )}
+                      </div>
+                      
+                      {/* Attachments for this indicator */}
+                      {Object.keys(attachments).filter(key => 
+                        key.startsWith(`${record.firebaseKey}_${index}_${main.title}`)
+                      ).length > 0 && (
+                        <div style={{
+                          display: "flex",
+                          flexWrap: "wrap",
+                          gap: "8px",
+                          marginTop: "8px",
+                          marginBottom: "8px",
+                          marginLeft: "12px",
+                          width: "100%"
+                        }}>
+                          {Object.entries(attachments)
+                            .filter(([key, value]) => 
+                              key.startsWith(`${record.firebaseKey}_${index}_${main.title}`)
+                            )
+                            .map(([key, attachment]) => (
+                              <div key={key} style={{
+                                display: "flex",
+                                alignItems: "center",
+                                gap: "6px",
+                                backgroundColor: "#e8f5e9",
+                                padding: "4px 10px",
+                                borderRadius: "16px",
+                                fontSize: "11px",
+                                border: "1px solid #c8e6c9",
+                                maxWidth: "180px"
+                              }}>
+                                <span style={{ fontSize: "12px" }}>📎</span>
+                                <span style={{ 
+                                  overflow: "hidden", 
+                                  textOverflow: "ellipsis",
+                                  whiteSpace: "nowrap"
+                                }}>
+                                  {attachment.fileName}
+                                </span>
+                                {!hasSubmitted && (
+                                  <button
+                                    onClick={() => removeAttachment(key)}
+                                    style={{
+                                      background: "none",
+                                      border: "none",
+                                      color: "#d32f2f",
+                                      cursor: "pointer",
+                                      fontSize: "14px",
+                                      fontWeight: "bold",
+                                      padding: "0 2px",
+                                      marginLeft: "2px"
+                                    }}
+                                    title="Remove attachment"
+                                  >
+                                    ✕
+                                  </button>
+                                )}
+                              </div>
+                            ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
 
-                              <div className="mainreference-field">
-                                <div className="field-content">
-                                  {main.fieldType === "multiple" &&
-                                    main.choices.map((choice, i) => {
-                                      const answerKey = `${activeTab}_${record.firebaseKey}_${index}_${main.title}`;
-                                      const isSelected = userAnswers[answerKey]?.value === choice;
-                                      
-                                      return (
-                                        <div key={i}>
-                                          <input 
-                                            type="radio" 
-                                            name={`${record.firebaseKey}_${index}`}
-                                            value={choice}
-                                            checked={isSelected}
-                                            onChange={(e) => handleAnswerChange(
-                                              record.firebaseKey,
-                                              index,
-                                              main.title,
-                                              e.target.value
-                                            )}
-                                            disabled={hasSubmitted || metadata?.forwardedToPO}
-                                          /> {choice || <span style={{ fontStyle: "italic", color: "gray" }}>Empty Option</span>}
-                                        </div>
-                                      );
-                                    })}
+            {/* Sub Indicators */}
+            {record.subIndicators?.map((sub, index) => {
+              const answerKey = `${activeTab}_${record.firebaseKey}_sub_${index}_${sub.title}`;
+              const answer = userAnswers[answerKey];
+              
+              return (
+                <div key={index} className="reference-wrapper">
+                  {/* Sub Indicator Row - Matching po-view style with lighter background */}
+                  <div className="reference-row sub-row" style={{
+                    
+                    display: "flex",
+                    marginTop: "5px",
+                    marginLeft: "15px"
+                    
+                  }}>
+                    <div className="reference-label" style={{
+                      
+                      width: "45%",
+                      background: "#fff6f6", // Light pink for sub-indicators
+                      padding: "12px 11px",
+                      fontWeight: 500,
+                      borderRight: "1px solid #cfcfcf",
+                      
+                      
+                    }}>
+                      {sub.title}
+                    </div>
 
-                                  {main.fieldType === "checkbox" &&
-                                    main.choices.map((choice, i) => {
-                                      const answerKey = `${activeTab}_${record.firebaseKey}_${index}_${main.title}_${i}`;
-                                      const isChecked = userAnswers[answerKey]?.value === true;
-                                      
-                                      return (
-                                        <div key={i}>
-                                          <input 
-                                            type="checkbox" 
-                                            checked={isChecked}
-                                            onChange={(e) => handleAnswerChange(
-                                              record.firebaseKey,
-                                              index,
-                                              `${main.title}_${i}`,
-                                              e.target.checked
-                                            )}
-                                            disabled={hasSubmitted || metadata?.forwardedToPO}
-                                          /> {choice || <span style={{ fontStyle: "italic", color: "gray" }}>Empty Option</span>}
-                                        </div>
-                                      );
-                                    })}
+                    <div className="reference-field" style={{
+                      width: "55%",
+                      padding: "8px 12px",
+                      background: "#ffffff"
+                    }}>
+                      {sub.fieldType === "multiple" &&
+                        sub.choices.map((choice, i) => {
+                          const isSelected = answer?.value === choice;
+                          
+                          return (
+                            <div key={i} style={{ marginBottom: "4px" }}>
+                              <input 
+                                type="radio" 
+                                name={`${record.firebaseKey}_sub_${index}`}
+                                value={choice}
+                                checked={isSelected}
+                                onChange={(e) => handleAnswerChange(
+                                  record.firebaseKey,
+                                  `sub_${index}`,
+                                  sub.title,
+                                  e.target.value
+                                )}
+                                disabled={hasSubmitted || metadata?.forwardedToPO}
+                              /> 
+                              <span style={{ marginLeft: "4px" }}>
+                                {choice || <span style={{ fontStyle: "italic", color: "gray" }}>Empty Option</span>}
+                              </span>
+                            </div>
+                          );
+                        })}
 
-                                  {main.fieldType === "short" && (
-                                    <input
-                                      type="text"
-                                      style={{ width: "100%", padding: "5px", borderRadius: "4px", border: "1px solid #ccc" }}
-                                      placeholder="Enter your answer..."
-                                      value={userAnswers[`${activeTab}_${record.firebaseKey}_${index}_${main.title}`]?.value || ""}
-                                      onChange={(e) => handleAnswerChange(
-                                        record.firebaseKey,
-                                        index,
-                                        main.title,
-                                        e.target.value
-                                      )}
-                                      disabled={hasSubmitted || metadata?.forwardedToPO}
-                                    />
-                                  )}
+                      {sub.fieldType === "checkbox" &&
+                        sub.choices.map((choice, i) => {
+                          const checkboxKey = `${activeTab}_${record.firebaseKey}_sub_${index}_${sub.title}_${i}`;
+                          const isChecked = userAnswers[checkboxKey]?.value === true;
+                          
+                          return (
+                            <div key={i} style={{ marginBottom: "4px" }}>
+                              <input 
+                                type="checkbox" 
+                                checked={isChecked}
+                                onChange={(e) => handleAnswerChange(
+                                  record.firebaseKey,
+                                  `sub_${index}`,
+                                  `${sub.title}_${i}`,
+                                  e.target.checked
+                                )}
+                                disabled={hasSubmitted || metadata?.forwardedToPO}
+                              /> 
+                              <span style={{ marginLeft: "4px" }}>
+                                {choice || <span style={{ fontStyle: "italic", color: "gray" }}>Empty Option</span>}
+                              </span>
+                            </div>
+                          );
+                        })}
 
-                                  {main.fieldType === "integer" && (
-                                    <input
-                                      type="number"
-                                      style={{ width: "100%", padding: "5px", borderRadius: "4px", border: "1px solid #ccc" }}
-                                      placeholder="Enter a number..."
-                                      value={userAnswers[`${activeTab}_${record.firebaseKey}_${index}_${main.title}`]?.value || ""}
-                                      onChange={(e) => handleAnswerChange(
-                                        record.firebaseKey,
-                                        index,
-                                        main.title,
-                                        e.target.value
-                                      )}
-                                      disabled={hasSubmitted || metadata?.forwardedToPO}
-                                    />
-                                  )}
+                      {sub.fieldType === "short" && (
+                        <input
+                          type="text"
+                          style={{ width: "100%", padding: "6px", borderRadius: "4px", border: "1px solid #ccc" }}
+                          placeholder="Enter your answer..."
+                          value={answer?.value || ""}
+                          onChange={(e) => handleAnswerChange(
+                            record.firebaseKey,
+                            `sub_${index}`,
+                            sub.title,
+                            e.target.value
+                          )}
+                          disabled={hasSubmitted || metadata?.forwardedToPO}
+                        />
+                      )}
 
-                                  {main.fieldType === "date" && (
-                                    <input
-                                      type="date"
-                                      style={{ width: "100%", padding: "5px", borderRadius: "4px", border: "1px solid #ccc" }}
-                                      value={userAnswers[`${activeTab}_${record.firebaseKey}_${index}_${main.title}`]?.value || ""}
-                                      onChange={(e) => handleAnswerChange(
-                                        record.firebaseKey,
-                                        index,
-                                        main.title,
-                                        e.target.value
-                                      )}
-                                      disabled={hasSubmitted || metadata?.forwardedToPO}
-                                    />
-                                  )}
-                                </div>
+                      {sub.fieldType === "integer" && (
+                        <input
+                          type="number"
+                          style={{ width: "100%", padding: "6px", borderRadius: "4px", border: "1px solid #ccc" }}
+                          placeholder="Enter a number..."
+                          value={answer?.value || ""}
+                          onChange={(e) => handleAnswerChange(
+                            record.firebaseKey,
+                            `sub_${index}`,
+                            sub.title,
+                            e.target.value
+                          )}
+                          disabled={hasSubmitted || metadata?.forwardedToPO}
+                        />
+                      )}
+
+                      {sub.fieldType === "date" && (
+                        <input
+                          type="date"
+                          style={{ width: "100%", padding: "6px", borderRadius: "4px", border: "1px solid #ccc" }}
+                          value={answer?.value || ""}
+                          onChange={(e) => handleAnswerChange(
+                            record.firebaseKey,
+                            `sub_${index}`,
+                            sub.title,
+                            e.target.value
+                          )}
+                          disabled={hasSubmitted || metadata?.forwardedToPO}
+                        />
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Mode of Verification for sub indicators */}
+                  {sub.verification && (
+                    <div className="reference-verification-full" style={{ 
+                      display: "flex",
+                      flexDirection: "column",
+                      width: "98.5%",
+                      marginLeft: "15px"
+                    }}>
+                      <div style={{ 
+                        display: "flex", 
+                        justifyContent: "space-between", 
+                        alignItems: "center",
+                        width: "100%",
+                        gap: "10px",
+                        padding: "6px 12px",
+                        background: "#ffffff",
+                        borderTop: "none"
+                      }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: "5px", flexWrap: "wrap" }}>
+                          <span style={{ fontWeight: 700, marginRight: "6px", color: "#081a4b" }}>Mode of Verification:</span>
+                          <span style={{ fontStyle: "italic" }}>{sub.verification}</span>
+                        </div>
+                        
+                        {!hasSubmitted && (
+                          <button
+                            onClick={() => triggerFileUpload(record.firebaseKey, `sub_${index}`, sub.title)}
+                            disabled={uploadingFile}
+                            style={{
+                              backgroundColor: "#840000",
+                              color: "white",
+                              border: "none",
+                              padding: "4px 10px",
+                              borderRadius: "4px",
+                              fontSize: "11px",
+                              cursor: uploadingFile ? "not-allowed" : "pointer",
+                              fontWeight: "600",
+                              display: "flex",
+                              alignItems: "center",
+                              gap: "4px",
+                              opacity: uploadingFile ? 0.6 : 1,
+                              whiteSpace: "nowrap"
+                            }}
+                          >
+                            {uploadingFile ? "⏳" : "+"} {uploadingFile ? "Uploading..." : "Add Attachment"}
+                          </button>
+                        )}
+                        
+                        {hasSubmitted && (
+                          <span style={{
+                            backgroundColor: "#4CAF50",
+                            color: "white",
+                            padding: "4px 10px",
+                            borderRadius: "4px",
+                            fontSize: "11px",
+                            fontWeight: "600",
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "4px",
+                            whiteSpace: "nowrap"
+                          }}>
+                            ✓ Submitted
+                          </span>
+                        )}
+                      </div>
+                      
+                      {/* Attachments for sub indicators */}
+                      {Object.keys(attachments).filter(key => 
+                        key.startsWith(`${record.firebaseKey}_sub_${index}_${sub.title}`)
+                      ).length > 0 && (
+                        <div style={{
+                          display: "flex",
+                          flexWrap: "wrap",
+                          gap: "8px",
+                          marginTop: "8px",
+                          marginBottom: "8px",
+                          marginLeft: "12px",
+                          width: "100%"
+                        }}>
+                          {Object.entries(attachments)
+                            .filter(([key, value]) => 
+                              key.startsWith(`${record.firebaseKey}_sub_${index}_${sub.title}`)
+                            )
+                            .map(([key, attachment]) => (
+                              <div key={key} style={{
+                                display: "flex",
+                                alignItems: "center",
+                                gap: "6px",
+                                backgroundColor: "#e8f5e9",
+                                padding: "4px 10px",
+                                borderRadius: "16px",
+                                fontSize: "11px",
+                                border: "1px solid #c8e6c9",
+                                maxWidth: "180px"
+                              }}>
+                                <span style={{ fontSize: "12px" }}>📎</span>
+                                <span style={{ 
+                                  overflow: "hidden", 
+                                  textOverflow: "ellipsis",
+                                  whiteSpace: "nowrap"
+                                }}>
+                                  {attachment.fileName}
+                                </span>
+                                {!hasSubmitted && (
+                                  <button
+                                    onClick={() => removeAttachment(key)}
+                                    style={{
+                                      background: "none",
+                                      border: "none",
+                                      color: "#d32f2f",
+                                      cursor: "pointer",
+                                      fontSize: "14px",
+                                      fontWeight: "bold",
+                                      padding: "0 2px",
+                                      marginLeft: "2px"
+                                    }}
+                                    title="Remove attachment"
+                                  >
+                                    ✕
+                                  </button>
+                                )}
+                              </div>
+                            ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* ===== NESTED SUB-INDICATORS SECTION - EXACT STYLE FROM po-view ===== */}
+                  {sub.nestedSubIndicators && sub.nestedSubIndicators.length > 0 && (
+                    <div className="nested-reference-wrapper" style={{ marginLeft: "30px", marginTop: "10px" }}>
+                      {sub.nestedSubIndicators.map((nested, nestedIndex) => {
+                        const nestedAnswerKey = `${activeTab}_${record.firebaseKey}_sub_${index}_nested_${nestedIndex}_${nested.title}`;
+                        const nestedAnswer = userAnswers[nestedAnswerKey];
+                        
+                        return (
+                          <div key={nested.id || nestedIndex} className="nested-reference-item" style={{ marginBottom: "15px" }}>
+                            <div className="nested-reference-row" style={{ display: "flex", border: "1px solid #cfcfcf" }}>
+                              <div className="nested-reference-label" style={{ 
+                                width: "45%", 
+                                background: "#f0f0f0", // Light gray for nested indicators
+                                padding: "8px 12px",
+                                fontWeight: 500,
+                                borderRight: "1px solid #cfcfcf"
+                              }}>
+                                {nested.title || 'Untitled'}
+                              </div>
+                              <div className="nested-reference-field" style={{ 
+                                width: "55%", 
+                                padding: "8px 12px",
+                                background: "#ffffff"
+                              }}>
+                                {/* Nested Multiple Choice */}
+                                {nested.fieldType === "multiple" && nested.choices?.map((choice, i) => {
+                                  const isSelected = nestedAnswer?.value === choice;
+                                  
+                                  return (
+                                    <div key={i} style={{ marginBottom: "4px" }}>
+                                      <input 
+                                        type="radio" 
+                                        name={`${record.firebaseKey}_sub_${index}_nested_${nestedIndex}`}
+                                        value={choice}
+                                        checked={isSelected}
+                                        onChange={(e) => handleAnswerChange(
+                                          record.firebaseKey,
+                                          `sub_${index}_nested_${nestedIndex}`,
+                                          nested.title,
+                                          e.target.value
+                                        )}
+                                        disabled={hasSubmitted || metadata?.forwardedToPO}
+                                      /> 
+                                      <span style={{ marginLeft: "4px" }}>{choice}</span>
+                                    </div>
+                                  );
+                                })}
+
+                                {/* Nested Checkbox */}
+                                {nested.fieldType === "checkbox" && nested.choices?.map((choice, i) => {
+                                  const nestedCheckboxKey = `${activeTab}_${record.firebaseKey}_sub_${index}_nested_${nestedIndex}_${nested.title}_${i}`;
+                                  const isChecked = userAnswers[nestedCheckboxKey]?.value === true;
+                                  
+                                  return (
+                                    <div key={i} style={{ marginBottom: "4px" }}>
+                                      <input 
+                                        type="checkbox" 
+                                        checked={isChecked}
+                                        onChange={(e) => handleAnswerChange(
+                                          record.firebaseKey,
+                                          `sub_${index}_nested_${nestedIndex}`,
+                                          `${nested.title}_${i}`,
+                                          e.target.checked
+                                        )}
+                                        disabled={hasSubmitted || metadata?.forwardedToPO}
+                                      /> 
+                                      <span style={{ marginLeft: "4px" }}>{choice}</span>
+                                    </div>
+                                  );
+                                })}
+
+                                {/* Nested Short Answer */}
+                                {nested.fieldType === "short" && (
+                                  <input
+                                    type="text"
+                                    style={{ width: "100%", padding: "6px", borderRadius: "4px", border: "1px solid #ccc" }}
+                                    placeholder="Enter your answer..."
+                                    value={nestedAnswer?.value || ""}
+                                    onChange={(e) => handleAnswerChange(
+                                      record.firebaseKey,
+                                      `sub_${index}_nested_${nestedIndex}`,
+                                      nested.title,
+                                      e.target.value
+                                    )}
+                                    disabled={hasSubmitted || metadata?.forwardedToPO}
+                                  />
+                                )}
+
+                                {/* Nested Integer */}
+                                {nested.fieldType === "integer" && (
+                                  <input
+                                    type="number"
+                                    style={{ width: "100%", padding: "6px", borderRadius: "4px", border: "1px solid #ccc" }}
+                                    placeholder="Enter a number..."
+                                    value={nestedAnswer?.value || ""}
+                                    onChange={(e) => handleAnswerChange(
+                                      record.firebaseKey,
+                                      `sub_${index}_nested_${nestedIndex}`,
+                                      nested.title,
+                                      e.target.value
+                                    )}
+                                    disabled={hasSubmitted || metadata?.forwardedToPO}
+                                  />
+                                )}
+
+                                {/* Nested Date */}
+                                {nested.fieldType === "date" && (
+                                  <input
+                                    type="date"
+                                    style={{ width: "100%", padding: "6px", borderRadius: "4px", border: "1px solid #ccc" }}
+                                    value={nestedAnswer?.value || ""}
+                                    onChange={(e) => handleAnswerChange(
+                                      record.firebaseKey,
+                                      `sub_${index}_nested_${nestedIndex}`,
+                                      nested.title,
+                                      e.target.value
+                                    )}
+                                    disabled={hasSubmitted || metadata?.forwardedToPO}
+                                  />
+                                )}
+
+                                {/* No field type selected */}
+                                {!nested.fieldType && (
+                                  <span style={{ fontStyle: "italic", color: "gray" }}>
+                                    No field type selected
+                                  </span>
+                                )}
                               </div>
                             </div>
-
-                            {/* Mode of Verification */}
-                            {main.verification && (
-                              <div className="reference-verification-full" style={{ 
-                                display: "flex",
-                                flexDirection: "column",
-                                width: "100%"
+                            
+                            {/* Verification for nested sub-indicator */}
+                            {nested.verification && (
+                              <div className="nested-verification" style={{
+                                padding: "6px 12px",
+                                background: "#ffffff",
+                                border: "1px solid #cfcfcf",
+                                borderTop: "none",
+                                fontSize: "11px"
                               }}>
-                                <div style={{ 
-                                  display: "flex", 
-                                  justifyContent: "space-between", 
-                                  alignItems: "center",
-                                  width: "100%",
-                                  gap: "10px"
-                                }}>
-                                  <div style={{ display: "flex", alignItems: "center", gap: "5px", flexWrap: "wrap" }}>
-                                    <span className="reference-verification-label">Mode of Verification:</span>
-                                    <span className="reference-verification-value">{main.verification}</span>
-                                  </div>
-                                  
-                                  {!hasSubmitted && (
-                                    <button
-                                      onClick={() => triggerFileUpload(record.firebaseKey, index, main.title)}
-                                      disabled={uploadingFile}
-                                      style={{
-                                        backgroundColor: "#840000",
-                                        color: "white",
-                                        border: "none",
-                                        padding: "4px 10px",
-                                        borderRadius: "4px",
-                                        fontSize: "11px",
-                                        cursor: uploadingFile ? "not-allowed" : "pointer",
-                                        fontWeight: "600",
-                                        display: "flex",
-                                        alignItems: "center",
-                                        gap: "4px",
-                                        opacity: uploadingFile ? 0.6 : 1,
-                                        whiteSpace: "nowrap"
-                                      }}
-                                    >
-                                      {uploadingFile ? "⏳" : "+"} {uploadingFile ? "Uploading..." : "Add Attachment"}
-                                    </button>
-                                  )}
-                                  
-                                  {hasSubmitted && (
-                                    <span style={{
-                                      backgroundColor: "#4CAF50",
-                                      color: "white",
-                                      padding: "4px 10px",
-                                      borderRadius: "4px",
-                                      fontSize: "11px",
-                                      fontWeight: "600",
-                                      display: "flex",
-                                      alignItems: "center",
-                                      gap: "4px",
-                                      whiteSpace: "nowrap"
-                                    }}>
-                                      ✓ Submitted
-                                    </span>
-                                  )}
-                                </div>
-                                
-                                {/* Attachments */}
-                                {Object.keys(attachments).filter(key => 
-                                  key.startsWith(`${record.firebaseKey}_${index}_${main.title}`)
-                                ).length > 0 && (
-                                  <div style={{
-                                    display: "flex",
-                                    flexWrap: "wrap",
-                                    gap: "8px",
-                                    marginTop: "8px",
-                                    width: "100%"
-                                  }}>
-                                    {Object.entries(attachments)
-                                      .filter(([key, value]) => 
-                                        key.startsWith(`${record.firebaseKey}_${index}_${main.title}`)
-                                      )
-                                      .map(([key, attachment]) => (
-                                        <div key={key} style={{
-                                          display: "flex",
-                                          alignItems: "center",
-                                          gap: "6px",
-                                          backgroundColor: hasSubmitted ? "#e0e0e0" : "#e8f5e9",
-                                          padding: "4px 10px",
-                                          borderRadius: "16px",
-                                          fontSize: "11px",
-                                          border: hasSubmitted ? "1px solid #bdbdbd" : "1px solid #c8e6c9",
-                                          maxWidth: "180px",
-                                          opacity: hasSubmitted ? 0.8 : 1
-                                        }}>
-                                          <span style={{ fontSize: "12px" }}>📎</span>
-                                          <span style={{ 
-                                            overflow: "hidden", 
-                                            textOverflow: "ellipsis",
-                                            whiteSpace: "nowrap"
-                                          }}>
-                                            {attachment.fileName}
-                                          </span>
-                                          {!hasSubmitted && (
-                                            <button
-                                              onClick={() => removeAttachment(key)}
-                                              style={{
-                                                background: "none",
-                                                border: "none",
-                                                color: "#d32f2f",
-                                                cursor: "pointer",
-                                                fontSize: "14px",
-                                                fontWeight: "bold",
-                                                padding: "0 2px",
-                                                marginLeft: "2px"
-                                              }}
-                                              title="Remove attachment"
-                                            >
-                                              ✕
-                                            </button>
-                                          )}
-                                          {hasSubmitted && (
-                                            <span style={{ fontSize: "12px", color: "#757575", marginLeft: "4px" }}>🔒</span>
-                                          )}
-                                        </div>
-                                      ))}
-                                  </div>
-                                )}
+                                <span style={{ fontWeight: 700, marginRight: "6px", color: "#081a4b" }}>
+                                  Mode of Verification:
+                                </span>
+                                <span style={{ fontStyle: "italic" }}>
+                                  {nested.verification}
+                                </span>
                               </div>
                             )}
                           </div>
-                        ))}
-
-{/* Sub Indicators */}
-{record.subIndicators?.map((sub, index) => (
-  <div key={index} className="reference-wrapper">
-    <div className="reference-row sub-row">
-      <div className="reference-label">{sub.title}</div>
-
-      <div className="reference-field">
-        {sub.fieldType === "multiple" &&
-          sub.choices.map((choice, i) => {
-            const answerKey = `${activeTab}_${record.firebaseKey}_sub_${index}_${sub.title}`;
-            const isSelected = userAnswers[answerKey]?.value === choice;
-            
-            return (
-              <div key={i}>
-                <input 
-                  type="radio" 
-                  name={`${record.firebaseKey}_sub_${index}`}
-                  value={choice}
-                  checked={isSelected}
-                  onChange={(e) => handleAnswerChange(
-                    record.firebaseKey,
-                    `sub_${index}`,
-                    sub.title,
-                    e.target.value
+                        );
+                      })}
+                    </div>
                   )}
-                  disabled={hasSubmitted || metadata?.forwardedToPO}
-                /> {choice || <span style={{ fontStyle: "italic", color: "gray" }}>Empty Option</span>}
-              </div>
-            );
-          })}
+                  {/* ===== END NESTED SUB-INDICATORS SECTION ===== */}
+                </div>
+              );
+            })}
+          </div>
+        ))}
 
-        {sub.fieldType === "checkbox" &&
-          sub.choices.map((choice, i) => {
-            const answerKey = `${activeTab}_${record.firebaseKey}_sub_${index}_${sub.title}_${i}`;
-            const isChecked = userAnswers[answerKey]?.value === true;
-            
-            return (
-              <div key={i}>
-                <input 
-                  type="checkbox" 
-                  checked={isChecked}
-                  onChange={(e) => handleAnswerChange(
-                    record.firebaseKey,
-                    `sub_${index}`,
-                    `${sub.title}_${i}`,
-                    e.target.checked
-                  )}
-                  disabled={hasSubmitted || metadata?.forwardedToPO}
-                /> {choice || <span style={{ fontStyle: "italic", color: "gray" }}>Empty Option</span>}
-              </div>
-            );
-          })}
-
-        {sub.fieldType === "short" && (
-          <input
-            type="text"
-            style={{ width: "100%", padding: "8px", borderRadius: "4px", border: "1px solid #ccc" }}
-            placeholder="Enter your answer..."
-            value={userAnswers[`${activeTab}_${record.firebaseKey}_sub_${index}_${sub.title}`]?.value || ""}
-            onChange={(e) => handleAnswerChange(
-              record.firebaseKey,
-              `sub_${index}`,
-              sub.title,
-              e.target.value
-            )}
-            disabled={hasSubmitted || metadata?.forwardedToPO}
-          />
-        )}
-
-        {sub.fieldType === "integer" && (
-          <input
-            type="number"
-            style={{ width: "100%", padding: "8px", borderRadius: "4px", border: "1px solid #ccc" }}
-            placeholder="Enter a number..."
-            value={userAnswers[`${activeTab}_${record.firebaseKey}_sub_${index}_${sub.title}`]?.value || ""}
-            onChange={(e) => handleAnswerChange(
-              record.firebaseKey,
-              `sub_${index}`,
-              sub.title,
-              e.target.value
-            )}
-            disabled={hasSubmitted || metadata?.forwardedToPO}
-          />
-        )}
-
-        {sub.fieldType === "date" && (
-          <input
-            type="date"
-            style={{ width: "100%", padding: "8px", borderRadius: "4px", border: "1px solid #ccc" }}
-            value={userAnswers[`${activeTab}_${record.firebaseKey}_sub_${index}_${sub.title}`]?.value || ""}
-            onChange={(e) => handleAnswerChange(
-              record.firebaseKey,
-              `sub_${index}`,
-              sub.title,
-              e.target.value
-            )}
-            disabled={hasSubmitted || metadata?.forwardedToPO}
-          />
-        )}
-      </div>
-    </div>
-
-    {/* Mode of Verification for sub indicators */}
-    {sub.verification && (
-      <div className="reference-verification-full" style={{ 
-        display: "flex",
-        flexDirection: "column",
-        width: "100%",
-        marginTop: "5px"
-      }}>
+        {/* Draft and Submit Buttons */}
         <div style={{ 
           display: "flex", 
           justifyContent: "space-between", 
           alignItems: "center",
-          width: "100%",
-          gap: "10px"
+          marginTop: "20px",
+          padding: "8px 20px",
+          backgroundColor: "#ffffff",
+          borderRadius: "8px",
+          marginBottom: "-0.8%"
         }}>
-          <div style={{ display: "flex", alignItems: "center", gap: "5px", flexWrap: "wrap" }}>
-            <span className="reference-verification-label">Mode of Verification:</span>
-            <span className="reference-verification-value">{sub.verification}</span>
-          </div>
-          
-          {!hasSubmitted && (
-            <button
-              onClick={() => triggerFileUpload(record.firebaseKey, `sub_${index}`, sub.title)}
-              disabled={uploadingFile}
-              style={{
-                backgroundColor: "#840000",
-                color: "white",
-                border: "none",
-                padding: "4px 10px",
-                borderRadius: "4px",
-                fontSize: "11px",
-                cursor: uploadingFile ? "not-allowed" : "pointer",
-                fontWeight: "600",
-                display: "flex",
-                alignItems: "center",
-                gap: "4px",
-                opacity: uploadingFile ? 0.6 : 1,
-                whiteSpace: "nowrap"
-              }}
-            >
-              {uploadingFile ? "⏳" : "+"} {uploadingFile ? "Uploading..." : "Add Attachment"}
-            </button>
-          )}
-          
-          {hasSubmitted && (
-            <span style={{
-              backgroundColor: "#4CAF50",
-              color: "white",
-              padding: "4px 10px",
-              borderRadius: "4px",
-              fontSize: "11px",
-              fontWeight: "600",
-              display: "flex",
-              alignItems: "center",
-              gap: "4px",
-              whiteSpace: "nowrap"
-            }}>
-              ✓ Submitted
-            </span>
-          )}
-        </div>
-        
-        {/* Attachments for sub indicators */}
-        {Object.keys(attachments).filter(key => 
-          key.startsWith(`${record.firebaseKey}_sub_${index}_${sub.title}`)
-        ).length > 0 && (
-          <div style={{
-            display: "flex",
-            flexWrap: "wrap",
-            gap: "8px",
-            marginTop: "8px",
-            width: "100%"
-          }}>
-            {Object.entries(attachments)
-              .filter(([key, value]) => 
-                key.startsWith(`${record.firebaseKey}_sub_${index}_${sub.title}`)
-              )
-              .map(([key, attachment]) => (
-                <div key={key} style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "6px",
-                  backgroundColor: hasSubmitted ? "#e0e0e0" : "#e8f5e9",
-                  padding: "4px 10px",
-                  borderRadius: "16px",
-                  fontSize: "11px",
-                  border: hasSubmitted ? "1px solid #bdbdbd" : "1px solid #c8e6c9",
-                  maxWidth: "180px",
-                  opacity: hasSubmitted ? 0.8 : 1
-                }}>
-                  <span style={{ fontSize: "12px" }}>📎</span>
+          <div style={{ display: "flex", alignItems: "center", gap: "15px" }}>
+            {!hasSubmitted && (
+              <>
+                <button
+                  onClick={handleSaveDraft}
+                  disabled={currentIndicators.length === 0}
+                  style={{
+                    backgroundColor: "#ffc107",
+                    color: "#020202",
+                    border: "none",
+                    padding: "8px 30px",
+                    borderRadius: "5px",
+                    fontSize: "14px",
+                    cursor: currentIndicators.length === 0 ? "not-allowed" : "pointer",
+                    fontWeight: "700",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "5px",
+                    opacity: currentIndicators.length === 0 ? 0.5 : 1
+                  }}
+                >
+                  Draft
+                </button>
+                
+                {isDraft && (
                   <span style={{ 
-                    overflow: "hidden", 
-                    textOverflow: "ellipsis",
-                    whiteSpace: "nowrap"
+                    backgroundColor: "#fff3cd", 
+                    color: "#ac8510",
+                    padding: "4px 12px",
+                    borderRadius: "20px",
+                    fontSize: "12px",
+                    fontWeight: "600",
+                    border: "1px solid #ffeeba"
                   }}>
-                    {attachment.fileName}
-                  </span>
-                  {!hasSubmitted && (
-                    <button
-                      onClick={() => removeAttachment(key)}
-                      style={{
-                        background: "none",
-                        border: "none",
-                        color: "#d32f2f",
-                        cursor: "pointer",
-                        fontSize: "14px",
-                        fontWeight: "bold",
-                        padding: "0 2px",
-                        marginLeft: "2px"
-                      }}
-                      title="Remove attachment"
-                    >
-                      ✕
-                    </button>
-                  )}
-                  {hasSubmitted && (
-                    <span style={{ fontSize: "12px", color: "#757575", marginLeft: "4px" }}>🔒</span>
-                  )}
-                </div>
-              ))}
-          </div>
-        )}
-      </div>
-    )}
-
-    {/* ===== NESTED SUB-INDICATORS SECTION - ADD THIS ===== */}
-    {sub.nestedSubIndicators && sub.nestedSubIndicators.length > 0 && (
-      <div className="nested-reference-wrapper" style={{ marginLeft: "30px", marginTop: "10px" }}>
-        {sub.nestedSubIndicators.map((nested, nestedIndex) => (
-          <div key={nested.id || nestedIndex} className="nested-reference-item" style={{ marginBottom: "15px" }}>
-            <div className="nested-reference-row" style={{ display: "flex", border: "1px solid #cfcfcf" }}>
-              <div className="nested-reference-label" style={{ 
-                width: "45%", 
-                background: "#fff6f6", 
-                padding: "8px 12px",
-                fontWeight: 500,
-                borderRight: "1px solid #cfcfcf"
-              }}>
-                {nested.title || 'Untitled'}
-              </div>
-              <div className="nested-reference-field" style={{ 
-                width: "55%", 
-                padding: "8px 12px",
-                background: "#ffffff"
-              }}>
-                {/* Nested Multiple Choice */}
-                {nested.fieldType === "multiple" && nested.choices?.map((choice, i) => {
-                  const nestedAnswerKey = `${activeTab}_${record.firebaseKey}_sub_${index}_nested_${nestedIndex}_${nested.title}`;
-                  const isSelected = userAnswers[nestedAnswerKey]?.value === choice;
-                  
-                  return (
-                    <div key={i} style={{ marginBottom: "4px" }}>
-                      <input 
-                        type="radio" 
-                        name={`${record.firebaseKey}_sub_${index}_nested_${nestedIndex}`}
-                        value={choice}
-                        checked={isSelected}
-                        onChange={(e) => handleAnswerChange(
-                          record.firebaseKey,
-                          `sub_${index}_nested_${nestedIndex}`,
-                          nested.title,
-                          e.target.value
-                        )}
-                        disabled={hasSubmitted || metadata?.forwardedToPO}
-                      /> 
-                      <span style={{ marginLeft: "4px" }}>{choice}</span>
-                    </div>
-                  );
-                })}
-
-                {/* Nested Checkbox */}
-                {nested.fieldType === "checkbox" && nested.choices?.map((choice, i) => {
-                  const nestedCheckboxKey = `${activeTab}_${record.firebaseKey}_sub_${index}_nested_${nestedIndex}_${nested.title}_${i}`;
-                  const isChecked = userAnswers[nestedCheckboxKey]?.value === true;
-                  
-                  return (
-                    <div key={i} style={{ marginBottom: "4px" }}>
-                      <input 
-                        type="checkbox" 
-                        checked={isChecked}
-                        onChange={(e) => handleAnswerChange(
-                          record.firebaseKey,
-                          `sub_${index}_nested_${nestedIndex}`,
-                          `${nested.title}_${i}`,
-                          e.target.checked
-                        )}
-                        disabled={hasSubmitted || metadata?.forwardedToPO}
-                      /> 
-                      <span style={{ marginLeft: "4px" }}>{choice}</span>
-                    </div>
-                  );
-                })}
-
-                {/* Nested Short Answer */}
-                {nested.fieldType === "short" && (
-                  <input
-                    type="text"
-                    style={{ width: "100%", padding: "6px", borderRadius: "4px", border: "1px solid #ccc" }}
-                    placeholder="Enter your answer..."
-                    value={userAnswers[`${activeTab}_${record.firebaseKey}_sub_${index}_nested_${nestedIndex}_${nested.title}`]?.value || ""}
-                    onChange={(e) => handleAnswerChange(
-                      record.firebaseKey,
-                      `sub_${index}_nested_${nestedIndex}`,
-                      nested.title,
-                      e.target.value
-                    )}
-                    disabled={hasSubmitted || metadata?.forwardedToPO}
-                  />
-                )}
-
-                {/* Nested Integer */}
-                {nested.fieldType === "integer" && (
-                  <input
-                    type="number"
-                    style={{ width: "100%", padding: "6px", borderRadius: "4px", border: "1px solid #ccc" }}
-                    placeholder="Enter a number..."
-                    value={userAnswers[`${activeTab}_${record.firebaseKey}_sub_${index}_nested_${nestedIndex}_${nested.title}`]?.value || ""}
-                    onChange={(e) => handleAnswerChange(
-                      record.firebaseKey,
-                      `sub_${index}_nested_${nestedIndex}`,
-                      nested.title,
-                      e.target.value
-                    )}
-                    disabled={hasSubmitted || metadata?.forwardedToPO}
-                  />
-                )}
-
-                {/* Nested Date */}
-                {nested.fieldType === "date" && (
-                  <input
-                    type="date"
-                    style={{ width: "100%", padding: "6px", borderRadius: "4px", border: "1px solid #ccc" }}
-                    value={userAnswers[`${activeTab}_${record.firebaseKey}_sub_${index}_nested_${nestedIndex}_${nested.title}`]?.value || ""}
-                    onChange={(e) => handleAnswerChange(
-                      record.firebaseKey,
-                      `sub_${index}_nested_${nestedIndex}`,
-                      nested.title,
-                      e.target.value
-                    )}
-                    disabled={hasSubmitted || metadata?.forwardedToPO}
-                  />
-                )}
-
-                {/* No field type selected */}
-                {!nested.fieldType && (
-                  <span style={{ fontStyle: "italic", color: "gray" }}>
-                    No field type selected
+                    DRAFT SAVED
                   </span>
                 )}
-              </div>
-            </div>
+                
+                {lastSavedDraft && isDraft && (
+                  <span style={{ fontSize: "12px", color: "#666" }}>
+                    Last saved: {lastSavedDraft}
+                  </span>
+                )}
+              </>
+            )}
             
-            {/* Verification for nested sub-indicator */}
-            {nested.verification && (
-              <div className="nested-verification" style={{
-                padding: "6px 12px",
-                background: "#ffffff",
-                border: "1px solid #cfcfcf",
-                borderTop: "none",
-                fontSize: "11px"
+            {hasSubmitted && (
+              <span style={{ 
+                backgroundColor: "#d4edda", 
+                color: "#155724",
+                padding: "4px 12px",
+                borderRadius: "20px",
+                fontSize: "12px",
+                fontWeight: "600",
+                border: "1px solid #c3e6cb"
               }}>
-                <span style={{ fontWeight: 700, marginRight: "6px", color: "#081a4b" }}>
-                  Mode of Verification:
-                </span>
-                <span style={{ fontStyle: "italic" }}>
-                  {nested.verification}
-                </span>
-              </div>
+                ✓ FINAL SUBMITTED
+              </span>
             )}
           </div>
-        ))}
-      </div>
+        </div>
+      </>
     )}
-    {/* ===== END NESTED SUB-INDICATORS SECTION ===== */}
-
   </div>
-))}
-                      </div>
-                    ))}
-
-                    {/* Draft and Submit Buttons */}
-                    <div style={{ 
-                      display: "flex", 
-                      justifyContent: "space-between", 
-                      alignItems: "center",
-                      marginTop: "20px",
-                      padding: "8px 20px",
-                      backgroundColor: "#ffffff",
-                      borderRadius: "8px",
-                      marginBottom:"-.8%"
-                    }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: "15px" }}>
-                        {!hasSubmitted && (
-                          <>
-                            <button
-                              onClick={handleSaveDraft}
-                              disabled={currentIndicators.length === 0}
-                              style={{
-                                backgroundColor: "#ffc107",
-                                color: "#020202",
-                                border: "none",
-                                padding: "8px 30px",
-                                borderRadius: "5px",
-                                fontSize: "14px",
-                                cursor: currentIndicators.length === 0 ? "not-allowed" : "pointer",
-                                fontWeight: "700",
-                                display: "flex",
-                                alignItems: "center",
-                                gap: "5px",
-                                opacity: currentIndicators.length === 0 ? 0.5 : 1
-                              }}
-                            >
-                              Draft
-                            </button>
-                            
-                            {isDraft && (
-                              <span style={{ 
-                                backgroundColor: "#fff3cd", 
-                                color: "#ac8510",
-                                padding: "4px 12px",
-                                borderRadius: "20px",
-                                fontSize: "12px",
-                                fontWeight: "600",
-                                border: "1px solid #ffeeba"
-                              }}>
-                                DRAFT SAVED
-                              </span>
-                            )}
-                            
-                            {lastSavedDraft && isDraft && (
-                              <span style={{ fontSize: "12px", color: "#666" }}>
-                                Last saved: {lastSavedDraft}
-                              </span>
-                            )}
-                          </>
-                        )}
-                        
-                        {hasSubmitted && (
-                          <span style={{ 
-                            backgroundColor: "#d4edda", 
-                            color: "#155724",
-                            padding: "4px 12px",
-                            borderRadius: "20px",
-                            fontSize: "12px",
-                            fontWeight: "600",
-                            border: "1px solid #c3e6cb"
-                          }}>
-                            ✓ FINAL SUBMITTED
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  </>
-                )}
-              </div>
-            </div>
+</div>
           </div>
         </div>
 

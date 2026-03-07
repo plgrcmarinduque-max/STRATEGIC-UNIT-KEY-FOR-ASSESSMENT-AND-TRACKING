@@ -12,15 +12,7 @@ import App from "./PO/app.jsx";
 import Dashboard from "./PO/dashboard.jsx";
 import Loader from "./loader.jsx";
 import FAS from "./PO/financial-administration-and-sustainability.jsx";
-import DP from "./PO/disaster-preparedness.jsx";
-import SPS from "./PO/social-protection-and-sensitivity.jsx";
-import HCR from "./PO/health-compliance-and-responsiveness.jsx";
-import SE from "./PO/sustainable-education.jsx";
-import BFC from "./PO/business-friendliness-and-competitiveness.jsx";
-import SPO from "./PO/safety-peace-and-order.jsx";
-import EM from "./PO/environmental-management.jsx";
-import THDCA from "./PO/tourism-heritage-development-culture-and-arts.jsx";
-import YD from "./PO/youth-development.jsx";
+
 import LGU from "./LGU/lgu-assessment.jsx";
 import LGUNotification from "./LGU/lgu-notifications.jsx";
 import MLGO from "./MLGO/mlgo-dashboard.jsx";
@@ -99,78 +91,6 @@ function Root() {
         element={
           <ProtectedRoute allowedRoles={["admin"]}>
             <FAS />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/disaster-preparedness"
-        element={
-          <ProtectedRoute allowedRoles={["admin"]}>
-            <DP />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/social-protection-and-sensitivity"
-        element={
-          <ProtectedRoute allowedRoles={["admin"]}>
-            <SPS />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/health-compliance-and-responsiveness"
-        element={
-          <ProtectedRoute allowedRoles={["admin"]}>
-            <HCR />
-          </ProtectedRoute>
-        }
-      />
-<Route
-  path="/sustainable-education"
-  element={
-    <ProtectedRoute allowedRoles={["admin"]}>
-      <SE />
-    </ProtectedRoute>
-  }
-/>
-<Route
-  path="/business-friendliness-and-competitiveness"
-  element={
-    <ProtectedRoute allowedRoles={["admin"]}>
-      <BFC />
-    </ProtectedRoute>
-  }
-/>
-      <Route
-        path="/safety-peace-and-order"
-        element={
-          <ProtectedRoute allowedRoles={["admin"]}>
-            <SPO />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/environmental-management"
-        element={
-          <ProtectedRoute allowedRoles={["admin"]}>
-            <EM />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/tourism-heritage-development-culture-and-arts"
-        element={
-          <ProtectedRoute allowedRoles={["admin"]}>
-            <THDCA />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/youth-development"
-        element={
-          <ProtectedRoute allowedRoles={["admin"]}>
-            <YD />
           </ProtectedRoute>
         }
       />
