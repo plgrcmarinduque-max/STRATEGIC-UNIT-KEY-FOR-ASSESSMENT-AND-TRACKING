@@ -1492,6 +1492,324 @@ width: 55%;
   border: 1px solid #cfcfcf;
 }
 
+/* ===================================== */
+/* NESTED SUB-INDICATOR STYLES - FRESH START */
+/* ===================================== */
+
+.nested-sub-indicators {
+  margin-left: 30px;
+  margin-top: 15px;
+  margin-bottom: 10px;
+  padding-left: 15px;
+  border-left: 3px solid #081a4b;
+}
+
+.nested-sub-card {
+  background: #f8f8f8;
+  border: 1px solid #d0d0d0;
+  margin-bottom: 15px;
+  border-radius: 4px;
+}
+
+.nested-sub-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 15px;
+  padding: 15px;
+  width: 700px;
+}
+
+/* LEFT COLUMN - exactly like main sub-indicator */
+.nested-sub-left {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
+/* Update these classes in your CSS */
+
+.nested-title-input {
+  width: 100%;
+  max-width: 650px; /* Changed from 600px to 650px */
+  height: 40px;
+  border: 2px solid #00000062;
+  background: #ffffff;
+  padding: 8px 12px;
+  font-size: 12px;
+  outline: none;
+  font-weight: 500;
+  box-sizing: border-box;
+}
+
+.nested-date-field {
+  width: 100%;
+  max-width: 650px; /* Changed from 200px to 650px */
+  height: 39px;
+  border: 2px solid #00000062;
+  padding: 0 10px;
+  background: white;
+  font-size: 14px;
+  box-sizing: border-box;
+}
+
+.nested-multiple-wrapper {
+  width: 100%;
+  max-width: 650px; /* Changed from 600px to 650px */
+  background: white;
+  border: 2px solid #00000062;
+  box-sizing: border-box;
+}
+
+.nested-short-wrapper {
+  width: 100%;
+  max-width: 650px; /* Changed from 600px to 650px */
+  background: white;
+  border: 2px solid #00000062;
+  padding: 8px;
+  box-sizing: border-box;
+}
+
+.nested-integer-wrapper {
+  width: 100%;
+  max-width: 650px; /* Changed from 200px to 650px */
+  background: white;
+  border: 2px solid #00000062;
+  padding: 8px;
+  box-sizing: border-box;
+}
+
+/* Keep verification styles if you ever need them, but they're removed from JSX */
+.nested-verification-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  max-width: 650px; /* Changed from 600px to 650px */
+  background: white;
+  border: 2px solid #00000040;
+  padding: 8px 12px;
+  box-sizing: border-box;
+}
+
+.nested-verification-label {
+  font-size: 14px;
+  font-weight: bold;
+  white-space: nowrap;
+  color: black;
+  min-width: 140px;
+}
+
+.nested-verification-input {
+  flex: 1;
+  height: 35px;
+  font-size: 12px;
+  border: 1px solid #0000002a;
+  padding: 0 10px;
+  background-color: #ffffff;
+  box-sizing: border-box;
+}
+
+/* Select field - match main sub-indicator */
+.nested-select-field {
+  width: 200px;
+  height: 40px;
+  border: 2px solid #00000062;
+  background: #ffffff;
+  font-size: 14px;
+  padding: 0 10px;
+  flex-shrink: 0;
+  box-sizing: border-box;
+}
+
+/* Delete button */
+.nested-delete-btn {
+  background-color: #504f4f;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  padding: 8px 12px;
+  font-size: 14px;
+  font-weight: bold;
+  cursor: pointer;
+  height: 40px;
+  min-width: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.nested-delete-btn:hover {
+  background-color: #000000;
+}
+
+/* Add Nested Sub-Indicator Button */
+.sub-left .add-nested-sub-btn {
+  background: #b00000;
+  color: white;
+  border: none;
+  padding: 4px 10px;
+  font-size: 12px;
+  cursor: pointer;
+  border-radius: 3px;
+  display: inline-flex;
+  align-items: center;
+  font-weight: 600;
+  margin-top: -2%;
+  margin-bottom: 8%;
+  margin-left: 0;
+  width: fit-content;
+  flex-shrink: 0;
+  
+}
+
+.add-nested-sub-btn .subplus-icon {
+  font-size: 16px;
+  margin-right: 4px;
+}
+
+.add-nested-sub-btn:hover {
+  background: #600202;
+}
+
+  /* Nested Add Choice Button - using correct class */
+.nested-add-choice-btn {
+  background: transparent;
+  border: none;
+  color: #000000af;
+  font-weight: 600;
+  cursor: pointer;
+  font-size: 12px;
+  margin-top: -3px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0;
+  margin-left: 12px;
+  width: fit-content;
+}
+
+/* Nested Remove Choice Button - using correct class */
+.nested-remove-choice-btn {
+  background: #ffffff;
+  color: rgb(0, 0, 0);
+  border: none;
+  border-radius: 4px;
+  padding: 2px 6px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: bold;
+  transition: 0.2s;
+  margin-right: 5px;
+  flex-shrink: 0;
+}
+
+/* Nested Choice Row - using correct class */
+.nested-choice-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: 12px;
+}
+
+.nested-choice-row input[type="radio"],
+.nested-choice-row input[type="checkbox"] {
+  transform: scale(1.2);
+  margin: 0;
+  flex-shrink: 0;
+}
+
+/* Nested Add Radio - using correct class */
+.nested-add-radio {
+  transform: scale(1.2);
+  margin: 0;
+  flex-shrink: 0;
+}
+
+/* Nested Reference Styles for Display */
+/* Nested Reference Styles for Display */
+.nested-reference-wrapper {
+  margin-left: 45px;
+  margin-top: 8px;
+  margin-bottom: 12px;
+  padding-left: 15px;
+  border-left: 3px solid #ffaa00;
+}
+
+.nested-reference-item {
+  margin-bottom: 8px;
+}
+
+.nested-reference-row {
+  display: flex;
+  border: 1px solid #cfcfcf;
+  border-top: 1px solid #cfcfcf;
+  width: 100%;
+}
+
+.nested-reference-label {
+  width: 45%;
+  background: #fff6f6;
+  padding: 8px 12px;
+  font-size: 12px;
+  font-weight: 500;
+  color: #000;
+  display: flex;
+  align-items: center;
+  border-right: 1px solid #cfcfcf;
+  box-sizing: border-box;
+}
+
+.nested-reference-field {
+  width: 55%;
+  background: #ffffff;
+  padding: 8px 12px;
+  font-size: 12px;
+  color: #000;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  box-sizing: border-box;
+}
+
+.nested-reference-field div {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.nested-reference-field input[type="radio"],
+.nested-reference-field input[type="checkbox"] {
+  margin-right: 4px;
+  transform: scale(1);
+}
+
+.nested-verification {
+  width: 100%;
+  padding: 6px 12px;
+  background: #ffffff;
+  border: 1px solid #cfcfcf;
+  border-top: none;
+  font-size: 11px;
+  box-sizing: border-box;
+}
+
+.nested-verification .verification-label {
+  font-weight: 700;
+  margin-right: 6px;
+  color: #081a4b;
+}
+
+.nested-verification .verification-value {
+  font-weight: 400;
+  color: #333;
+  font-style: italic;
+}
+
+/* ===================================== */
+
 .indicator-display-card {
   padding: 20px;
   background: #f4f4f4;
@@ -1722,3 +2040,47 @@ width: 55%;
 .sidebar-item.activated {
   background-color :#f4f4f442;
 }
+
+/* ULTIMATE PROTECTION - Main sub-indicator ONLY */
+.sub-card > .sub-header > .sub-left > .multiple-wrapper,
+.sub-card > .sub-header > .sub-left > .short-wrapper,
+.sub-card > .sub-header > .sub-left > .integer-wrapper,
+.sub-card > .sub-header > .sub-left > .verification-row {
+  width: 142.6% !important;
+  max-width: none !important;
+  margin-top: -9px !important;
+  background: white !important;
+}
+
+.sub-card > .sub-header > .sub-left > .multiple-wrapper .choice-row {
+  margin-left: 12px !important;
+}
+
+.sub-card > .sub-header > .sub-left > .verification-row {
+  width: 145.6% !important;
+  margin-top: -10px !important;
+}
+
+
+
+
+/* Force main sub-indicator container to maintain its width */
+.sub-left {
+  width: 100px !important;
+  max-width: none !important;
+  min-width: 0 !important;
+}
+
+/* Prevent nested elements from affecting parent width */
+.nested-sub-indicators {
+  width: 100% !important;
+  max-width: 100% !important;
+  box-sizing: border-box !important;
+}
+
+/* Ensure nested cards don't overflow */
+.nested-sub-card {
+  width: 700px !important;
+  box-sizing: border-box !important;
+}
+

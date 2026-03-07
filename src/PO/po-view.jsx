@@ -26,7 +26,20 @@ export default function POView() {
   const displayName = user?.email || "User";
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [showEditProfileModal, setShowEditProfileModal] = useState(false);
-  const [indicators, setIndicators] = useState([]);
+  
+  // State for ALL indicators (10 categories) - ADD THESE
+  const [indicators, setIndicators] = useState([]); // Financial
+  const [disasterIndicators, setDisasterIndicators] = useState([]);
+  const [socialIndicators, setSocialIndicators] = useState([]);
+  const [healthIndicators, setHealthIndicators] = useState([]);
+  const [educationIndicators, setEducationIndicators] = useState([]);
+  const [businessIndicators, setBusinessIndicators] = useState([]);
+  const [safetyIndicators, setSafetyIndicators] = useState([]);
+  const [environmentalIndicators, setEnvironmentalIndicators] = useState([]);
+  const [tourismIndicators, setTourismIndicators] = useState([]);
+  const [youthIndicators, setYouthIndicators] = useState([]);
+  
+  const [activeTab, setActiveTab] = useState(1); // ADD THIS
   const [userRole, setUserRole] = useState(null);
   const [userMunicipality, setUserMunicipality] = useState("");
   const [loading, setLoading] = useState(true);
@@ -38,8 +51,6 @@ export default function POView() {
     year: "",
     municipality: ""
   });
-
-
 
   const [showExportModal, setShowExportModal] = useState(false);
 const [editProfileData, setEditProfileData] = useState({
@@ -59,6 +70,10 @@ const [profileData, setProfileData] = useState({
   });
 
 const [remarks, setRemarks] = useState("");
+
+const handleTabChange = (tabId) => { // ADD THIS
+  setActiveTab(tabId);
+};
 
 // Add this function to handle verification
 const handleVerifyAssessment = async () => {
@@ -915,47 +930,137 @@ useEffect(() => {
   fetchDeadline();
 }, [adminUid, selectedYear]);
 
+// REPLACE YOUR EXISTING fetchIndicators useEffect WITH THIS:
 useEffect(() => {
-  if (!auth.currentUser || !selectedYear) return;
+  if (!auth.currentUser || !selectedYear || !adminUid) return;
 
-  const fetchIndicators = async () => {
+  const fetchAllIndicators = async () => {
     try {
-      const usersRef = ref(db, "users");
-      const usersSnapshot = await get(usersRef);
+      console.log(`Fetching ALL indicators for year ${selectedYear}...`);
       
-      if (usersSnapshot.exists()) {
-        const users = usersSnapshot.val();
-        const adminUid = Object.keys(users).find(
-          uid => users[uid]?.role === "admin"
-        );
+      // Define all 10 categories with their paths
+      const categories = [
+        { key: 'financial', path: 'financial-administration-and-sustainability' },
+        { key: 'disaster', path: 'disaster-preparedness' },
+        { key: 'social', path: 'social-protection-and-sensitivity' },
+        { key: 'health', path: 'health-compliance-and-responsiveness' },
+        { key: 'education', path: 'sustainable-education' },
+        { key: 'business', path: 'business-friendliness-and-competitiveness' },
+        { key: 'safety', path: 'safety-peace-and-order' },
+        { key: 'environmental', path: 'environmental-management' },
+        { key: 'tourism', path: 'tourism-heritage-development-culture-and-arts' },
+        { key: 'youth', path: 'youth-development' }
+      ];
+      
+      // Fetch each category
+      for (const category of categories) {
+        let indicatorsRef;
         
-        if (adminUid) {
-          const indicatorsRef = ref(
-            db,
-            `financial/${adminUid}/${selectedYear}/financial-administration-and-sustainability/assessment`
+        if (category.key === 'financial') {
+          indicatorsRef = ref(
+            db, 
+            `financial/${adminUid}/${selectedYear}/${category.path}/assessment`
           );
+        } else {
+          indicatorsRef = ref(
+            db,
+            `${category.key}/${adminUid}/${selectedYear}/${category.path}/assessment`
+          );
+        }
+        
+        const snapshot = await get(indicatorsRef);
+        
+        if (snapshot.exists()) {
+          const data = snapshot.val();
+          const indicatorsArray = Object.keys(data).map(key => ({
+            firebaseKey: key,
+            ...data[key]
+          }));
           
-          onValue(indicatorsRef, (snapshot) => {
-            if (snapshot.exists()) {
-              const data = snapshot.val();
-              const indicatorsArray = Object.keys(data).map(key => ({
-                firebaseKey: key,
-                ...data[key]
-              }));
+          console.log(`📊 Loaded ${category.key} indicators:`, indicatorsArray.length);
+          
+          // Set the appropriate state based on category
+          switch(category.key) {
+            case 'financial':
               setIndicators(indicatorsArray);
-            } else {
+              break;
+            case 'disaster':
+              setDisasterIndicators(indicatorsArray);
+              break;
+            case 'social':
+              setSocialIndicators(indicatorsArray);
+              break;
+            case 'health':
+              setHealthIndicators(indicatorsArray);
+              break;
+            case 'education':
+              setEducationIndicators(indicatorsArray);
+              break;
+            case 'business':
+              setBusinessIndicators(indicatorsArray);
+              break;
+            case 'safety':
+              setSafetyIndicators(indicatorsArray);
+              break;
+            case 'environmental':
+              setEnvironmentalIndicators(indicatorsArray);
+              break;
+            case 'tourism':
+              setTourismIndicators(indicatorsArray);
+              break;
+            case 'youth':
+              setYouthIndicators(indicatorsArray);
+              break;
+            default:
+              break;
+          }
+        } else {
+          // Set empty array if no data
+          switch(category.key) {
+            case 'financial':
               setIndicators([]);
-            }
-          });
+              break;
+            case 'disaster':
+              setDisasterIndicators([]);
+              break;
+            case 'social':
+              setSocialIndicators([]);
+              break;
+            case 'health':
+              setHealthIndicators([]);
+              break;
+            case 'education':
+              setEducationIndicators([]);
+              break;
+            case 'business':
+              setBusinessIndicators([]);
+              break;
+            case 'safety':
+              setSafetyIndicators([]);
+              break;
+            case 'environmental':
+              setEnvironmentalIndicators([]);
+              break;
+            case 'tourism':
+              setTourismIndicators([]);
+              break;
+            case 'youth':
+              setYouthIndicators([]);
+              break;
+            default:
+              break;
+          }
         }
       }
+      
+      console.log("✅ All indicators fetched successfully");
     } catch (error) {
       console.error("Error fetching indicators:", error);
     }
   };
 
-  fetchIndicators();
-}, [selectedYear]);
+  fetchAllIndicators();
+}, [selectedYear, adminUid, db]);
 
 
 
@@ -1112,6 +1217,23 @@ const handleSignOut = () => {
   const confirmLogout = window.confirm("Are you sure you want to sign out?");
   if (confirmLogout) {
     navigate("/login");
+  }
+};
+
+// Get current tab indicators - ADD THIS FUNCTION
+const getCurrentTabIndicators = () => {
+  switch(activeTab) {
+    case 1: return indicators;
+    case 2: return disasterIndicators;
+    case 3: return socialIndicators;
+    case 4: return healthIndicators;
+    case 5: return educationIndicators;
+    case 6: return businessIndicators;
+    case 7: return safetyIndicators;
+    case 8: return environmentalIndicators;
+    case 9: return tourismIndicators;
+    case 10: return youthIndicators;
+    default: return indicators;
   }
 };
 
@@ -1471,20 +1593,68 @@ return (
 </div>
 
 
-          {/* Tabs */}
+          {/* Tabs - Make them clickable */}
           <div className={style.assessmentTabs}>
-            <button className={style.activeTab}>
+            <button 
+              className={activeTab === 1 ? style.activeTab : ''}
+              onClick={() => handleTabChange(1)}
+            >
               Financial Administration and Sustainability
             </button>
-            <button>Disaster Preparedness</button>
-            <button>Social Protection and Sensitivity</button>
-            <button>Health Compliance and Responsiveness</button>
-            <button>Sustainable Education</button>
-            <button>Business Friendliness and Competitiveness</button>
-            <button>Safety, Peace and Order</button>
-            <button>Environmental Management</button>
-            <button>Tourism, Heritage Development, Culture and Arts</button>
-            <button>Youth Development</button>
+            <button 
+              className={activeTab === 2 ? style.activeTab : ''}
+              onClick={() => handleTabChange(2)}
+            >
+              Disaster Preparedness
+            </button>
+            <button 
+              className={activeTab === 3 ? style.activeTab : ''}
+              onClick={() => handleTabChange(3)}
+            >
+              Social Protection and Sensitivity
+            </button>
+            <button 
+              className={activeTab === 4 ? style.activeTab : ''}
+              onClick={() => handleTabChange(4)}
+            >
+              Health Compliance and Responsiveness
+            </button>
+            <button 
+              className={activeTab === 5 ? style.activeTab : ''}
+              onClick={() => handleTabChange(5)}
+            >
+              Sustainable Education
+            </button>
+            <button 
+              className={activeTab === 6 ? style.activeTab : ''}
+              onClick={() => handleTabChange(6)}
+            >
+              Business Friendliness and Competitiveness
+            </button>
+            <button 
+              className={activeTab === 7 ? style.activeTab : ''}
+              onClick={() => handleTabChange(7)}
+            >
+              Safety, Peace and Order
+            </button>
+            <button 
+              className={activeTab === 8 ? style.activeTab : ''}
+              onClick={() => handleTabChange(8)}
+            >
+              Environmental Management
+            </button>
+            <button 
+              className={activeTab === 9 ? style.activeTab : ''}
+              onClick={() => handleTabChange(9)}
+            >
+              Tourism, Heritage Development, Culture and Arts
+            </button>
+            <button 
+              className={activeTab === 10 ? style.activeTab : ''}
+              onClick={() => handleTabChange(10)}
+            >
+              Youth Development
+            </button>
           </div>
 
 
@@ -1500,281 +1670,464 @@ return (
     ) : (
       <>
         {lguAnswers.length > 0 ? (
-          lguAnswers.map((lgu) => (
-            <div key={lgu.id}>
-              
-              {/* Indicators with Answers */}
-              {indicators && indicators.length > 0 ? (
-                indicators.map((record) => (
-                  <div key={record.firebaseKey} className="reference-wrapper">
-                    
-                    {/* Main Indicators */}
-                    {record.mainIndicators?.map((main, index) => {
-                      const answerKey = `${record.firebaseKey}_${index}_${main.title}`;
-                      const answer = lgu.data?.[answerKey];
+          lguAnswers.map((lgu) => {
+            const currentTabIndicators = getCurrentTabIndicators();
+            
+            return (
+              <div key={lgu.id}>
+                
+                {/* Indicators with Answers */}
+                {currentTabIndicators && currentTabIndicators.length > 0 ? (
+                  currentTabIndicators.map((record) => (
+                    <div key={record.firebaseKey} className="reference-wrapper">
                       
-                      return (
-                        <div key={index} className="reference-wrapper">
-                          {/* Indicator Row */}
-                          <div className="reference-row">
-                            <div className="reference-label">
-                              {main.title}
-                            </div>
+                      {/* Main Indicators */}
+                      {record.mainIndicators?.map((main, index) => {
+                        const answerKey = `${record.firebaseKey}_${index}_${main.title}`;
+                        const answer = lgu.data?.[answerKey];
+                        
+                        return (
+                          <div key={index} className="reference-wrapper">
+                            {/* Indicator Row */}
+                            <div className="reference-row">
+                              <div className="reference-label">
+                                {main.title}
+                              </div>
 
-                            <div className="mainreference-field">
-                              <div className="field-content">
-                                
-                                {main.fieldType === "multiple" &&
-                                  main.choices.map((choice, i) => (
-                                    <div key={i}>
-                                      <input 
-                                        type="radio" 
-                                        checked={answer?.value === choice}
-                                        disabled 
-                                      /> 
-                                      <span>
-                                        {choice}
-                                      </span>
-                                    </div>
-                                  ))}
-                                
-                                {main.fieldType === "checkbox" &&
-                                  main.choices.map((choice, i) => {
-                                    const checkboxKey = `${record.firebaseKey}_${index}_${main.title}_${i}`;
-                                    const checkboxAnswer = lgu.data?.[checkboxKey];
-                                    
-                                    return (
+                              <div className="mainreference-field">
+                                <div className="field-content">
+                                  
+                                  {main.fieldType === "multiple" &&
+                                    main.choices.map((choice, i) => (
                                       <div key={i}>
                                         <input 
-                                          type="checkbox" 
-                                          checked={checkboxAnswer?.value === true}
+                                          type="radio" 
+                                          checked={answer?.value === choice}
                                           disabled 
                                         /> 
                                         <span>
                                           {choice}
                                         </span>
                                       </div>
-                                    );
-                                  })}
-                                
-                                {(main.fieldType === "short" || main.fieldType === "integer" || main.fieldType === "date") && (
-                                  <div>
-                                    {answer?.value ? (
-                                      <span>
-                                        {answer.value}
-                                      </span>
-                                    ) : (
-                                      <span style={{ fontStyle: "italic", color: "gray" }}>
-                                        No answer provided
-                                      </span>
-                                    )}
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-                          </div>
-
-                          {/* Mode of Verification with Attachments */}
-                          {main.verification && (
-                            <div className="reference-verification-full" style={{ 
-                              display: "flex",
-                              flexDirection: "column",
-                              width: "100%"
-                            }}>
-                              <div style={{ 
-                                display: "flex", 
-                                justifyContent: "space-between", 
-                                alignItems: "center",
-                                width: "100%",
-                                gap: "10px"
-                              }}>
-                                <div style={{ display: "flex", alignItems: "center", gap: "5px", flexWrap: "wrap" }}>
-                                  <span className="reference-verification-label">Mode of Verification:</span>
-                                  <span className="reference-verification-value">{main.verification}</span>
-                                </div>
-                              </div>
-                              
-                              {/* Attachments for this indicator */}
-                              {(() => {
-                                const indicatorId = `${record.firebaseKey}_${index}_${main.title}`;
-                                const indicatorAttachments = lgu.attachmentsByIndicator?.[indicatorId] || [];
-                                
-                                return indicatorAttachments.length > 0 && (
-                                  <div style={{
-                                    display: "flex",
-                                    flexWrap: "wrap",
-                                    gap: "8px",
-                                    marginTop: "8px",
-                                    width: "100%"
-                                  }}>
-                                    {indicatorAttachments.map((attachment, idx) => (
-                                      <div key={idx} style={{
-                                        display: "flex",
-                                        alignItems: "center",
-                                        gap: "6px",
-                                        backgroundColor: "#e8f5e9",
-                                        padding: "4px 10px",
-                                        borderRadius: "16px",
-                                        fontSize: "11px",
-                                        border: "1px solid #c8e6c9",
-                                        maxWidth: "200px",
-                                        cursor: "pointer"
-                                      }}
-                                      onClick={() => downloadAttachment(attachment)}>
-                                        <span style={{ fontSize: "12px" }}>📎</span>
-                                        <span style={{ 
-                                          overflow: "hidden", 
-                                          textOverflow: "ellipsis",
-                                          whiteSpace: "nowrap",
-                                          color: "#0c1a4b",
-                                          textDecoration: "underline"
-                                        }}>
-                                          {attachment.name || 'Attachment'}
-                                        </span>
-                                      </div>
                                     ))}
-                                  </div>
-                                );
-                              })()}
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
-
-                    {/* Sub Indicators */}
-                    {record.subIndicators?.map((sub, index) => {
-                      const answerKey = `${record.firebaseKey}_sub_${index}_${sub.title}`;
-                      const answer = lgu.data?.[answerKey];
-                      
-                      return (
-                        <div key={index} className="reference-wrapper">
-                          {/* Sub Indicator Row */}
-                          <div className="reference-row sub-row">
-                            <div className="reference-label">
-                              {sub.title}
-                            </div>
-
-                            <div className="reference-field">
-                              
-                              {sub.fieldType === "multiple" &&
-                                sub.choices.map((choice, i) => (
-                                  <div key={i}>
-                                    <input 
-                                      type="radio" 
-                                      checked={answer?.value === choice}
-                                      disabled 
-                                    /> 
-                                    <span>
-                                      {choice}
-                                    </span>
-                                  </div>
-                                ))}
-                              
-                              {sub.fieldType === "checkbox" &&
-                                sub.choices.map((choice, i) => {
-                                  const checkboxKey = `${record.firebaseKey}_sub_${index}_${sub.title}_${i}`;
-                                  const checkboxAnswer = lgu.data?.[checkboxKey];
                                   
-                                  return (
-                                    <div key={i}>
-                                      <input 
-                                        type="checkbox" 
-                                        checked={checkboxAnswer?.value === true}
-                                        disabled 
-                                      /> 
-                                      <span>
-                                        {choice}
-                                      </span>
+                                  {main.fieldType === "checkbox" &&
+                                    main.choices.map((choice, i) => {
+                                      const checkboxKey = `${record.firebaseKey}_${index}_${main.title}_${i}`;
+                                      const checkboxAnswer = lgu.data?.[checkboxKey];
+                                      
+                                      return (
+                                        <div key={i}>
+                                          <input 
+                                            type="checkbox" 
+                                            checked={checkboxAnswer?.value === true}
+                                            disabled 
+                                          /> 
+                                          <span>
+                                            {choice}
+                                          </span>
+                                        </div>
+                                      );
+                                    })}
+                                  
+                                  {(main.fieldType === "short" || main.fieldType === "integer" || main.fieldType === "date") && (
+                                    <div>
+                                      {answer?.value ? (
+                                        <span>
+                                          {answer.value}
+                                        </span>
+                                      ) : (
+                                        <span style={{ fontStyle: "italic", color: "gray" }}>
+                                          No answer provided
+                                        </span>
+                                      )}
                                     </div>
-                                  );
-                                })}
-                              
-                              {(sub.fieldType === "short" || sub.fieldType === "integer" || sub.fieldType === "date") && (
-                                <div>
-                                  {answer?.value ? (
-                                    <span>
-                                      {answer.value}
-                                    </span>
-                                  ) : (
-                                    <span style={{ fontStyle: "italic", color: "gray" }}>
-                                      No answer provided
-                                    </span>
                                   )}
                                 </div>
-                              )}
-                            </div>
-                          </div>
-
-                          {/* Mode of Verification for Sub Indicators */}
-                          {sub.verification && (
-                            <div className="reference-verification-full" style={{ 
-                              display: "flex",
-                              flexDirection: "column",
-                              width: "100%",
-                              marginTop: "5px"
-                            }}>
-                              <div style={{ display: "flex", alignItems: "center", gap: "5px", flexWrap: "wrap" }}>
-                                <span className="reference-verification-label">Mode of Verification:</span>
-                                <span className="reference-verification-value">{sub.verification}</span>
                               </div>
-                              
-                              {/* Attachments for this sub indicator */}
-                              {(() => {
-                                const indicatorId = `${record.firebaseKey}_sub_${index}_${sub.title}`;
-                                const indicatorAttachments = lgu.attachmentsByIndicator?.[indicatorId] || [];
-                                
-                                return indicatorAttachments.length > 0 && (
-                                  <div style={{
-                                    display: "flex",
-                                    flexWrap: "wrap",
-                                    gap: "8px",
-                                    marginTop: "8px",
-                                    width: "100%"
-                                  }}>
-                                    {indicatorAttachments.map((attachment, idx) => (
-                                      <div key={idx} style={{
-                                        display: "flex",
-                                        alignItems: "center",
-                                        gap: "6px",
-                                        backgroundColor: "#e8f5e9",
-                                        padding: "4px 10px",
-                                        borderRadius: "16px",
-                                        fontSize: "11px",
-                                        border: "1px solid #c8e6c9",
-                                        maxWidth: "200px",
-                                        cursor: "pointer"
-                                      }}
-                                      onClick={() => downloadAttachment(attachment)}>
-                                        <span style={{ fontSize: "12px" }}>📎</span>
-                                        <span style={{ 
-                                          overflow: "hidden", 
-                                          textOverflow: "ellipsis",
-                                          whiteSpace: "nowrap",
-                                          color: "#0c1a4b",
-                                          textDecoration: "underline"
-                                        }}>
-                                          {attachment.name || 'Attachment'}
-                                        </span>
-                                      </div>
-                                    ))}
-                                  </div>
-                                );
-                              })()}
                             </div>
-                          )}
+
+                            {/* Mode of Verification with Attachments */}
+                            {main.verification && (
+                              <div className="reference-verification-full" style={{ 
+                                display: "flex",
+                                flexDirection: "column",
+                                width: "100%"
+                              }}>
+                                <div style={{ 
+                                  display: "flex", 
+                                  justifyContent: "space-between", 
+                                  alignItems: "center",
+                                  width: "100%",
+                                  gap: "10px"
+                                }}>
+                                  <div style={{ display: "flex", alignItems: "center", gap: "5px", flexWrap: "wrap" }}>
+                                    <span className="reference-verification-label">Mode of Verification:</span>
+                                    <span className="reference-verification-value">{main.verification}</span>
+                                  </div>
+                                </div>
+                                
+                                {/* Attachments for this indicator */}
+                                {(() => {
+                                  const indicatorId = `${record.firebaseKey}_${index}_${main.title}`;
+                                  const indicatorAttachments = lgu.attachmentsByIndicator?.[indicatorId] || [];
+                                  
+                                  return indicatorAttachments.length > 0 && (
+                                    <div style={{
+                                      display: "flex",
+                                      flexWrap: "wrap",
+                                      gap: "8px",
+                                      marginTop: "8px",
+                                      width: "100%"
+                                    }}>
+                                      {indicatorAttachments.map((attachment, idx) => (
+                                        <div key={idx} style={{
+                                          display: "flex",
+                                          alignItems: "center",
+                                          gap: "6px",
+                                          backgroundColor: "#e8f5e9",
+                                          padding: "4px 10px",
+                                          borderRadius: "16px",
+                                          fontSize: "11px",
+                                          border: "1px solid #c8e6c9",
+                                          maxWidth: "200px",
+                                          cursor: "pointer"
+                                        }}
+                                        onClick={() => downloadAttachment(attachment)}>
+                                          <span style={{ fontSize: "12px" }}>📎</span>
+                                          <span style={{ 
+                                            overflow: "hidden", 
+                                            textOverflow: "ellipsis",
+                                            whiteSpace: "nowrap",
+                                            color: "#0c1a4b",
+                                            textDecoration: "underline"
+                                          }}>
+                                            {attachment.name || 'Attachment'}
+                                          </span>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  );
+                                })()}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+
+{/* Sub Indicators */}
+{record.subIndicators?.map((sub, index) => {
+  const answerKey = `${record.firebaseKey}_sub_${index}_${sub.title}`;
+  const answer = lgu.data?.[answerKey];
+  
+  return (
+    <div key={index} className="reference-wrapper">
+      {/* Sub Indicator Row */}
+      <div className="reference-row sub-row">
+        <div className="reference-label">
+          {sub.title}
+        </div>
+
+        <div className="reference-field">
+          
+          {sub.fieldType === "multiple" &&
+            sub.choices.map((choice, i) => (
+              <div key={i}>
+                <input 
+                  type="radio" 
+                  checked={answer?.value === choice}
+                  disabled 
+                /> 
+                <span>
+                  {choice}
+                </span>
+              </div>
+            ))}
+          
+          {sub.fieldType === "checkbox" &&
+            sub.choices.map((choice, i) => {
+              const checkboxKey = `${record.firebaseKey}_sub_${index}_${sub.title}_${i}`;
+              const checkboxAnswer = lgu.data?.[checkboxKey];
+              
+              return (
+                <div key={i}>
+                  <input 
+                    type="checkbox" 
+                    checked={checkboxAnswer?.value === true}
+                    disabled 
+                  /> 
+                  <span>
+                    {choice}
+                  </span>
+                </div>
+              );
+            })}
+          
+          {(sub.fieldType === "short" || sub.fieldType === "integer" || sub.fieldType === "date") && (
+            <div>
+              {answer?.value ? (
+                <span>
+                  {answer.value}
+                </span>
+              ) : (
+                <span style={{ fontStyle: "italic", color: "gray" }}>
+                  No answer provided
+                </span>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Mode of Verification for Sub Indicators */}
+      {sub.verification && (
+        <div className="reference-verification-full" style={{ 
+          display: "flex",
+          flexDirection: "column",
+          width: "100%",
+          marginTop: "5px"
+        }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "5px", flexWrap: "wrap" }}>
+            <span className="reference-verification-label">Mode of Verification:</span>
+            <span className="reference-verification-value">{sub.verification}</span>
+          </div>
+          
+          {/* Attachments for this sub indicator */}
+          {(() => {
+            const indicatorId = `${record.firebaseKey}_sub_${index}_${sub.title}`;
+            const indicatorAttachments = lgu.attachmentsByIndicator?.[indicatorId] || [];
+            
+            return indicatorAttachments.length > 0 && (
+              <div style={{
+                display: "flex",
+                flexWrap: "wrap",
+                gap: "8px",
+                marginTop: "8px",
+                width: "100%"
+              }}>
+                {indicatorAttachments.map((attachment, idx) => (
+                  <div key={idx} style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "6px",
+                    backgroundColor: "#e8f5e9",
+                    padding: "4px 10px",
+                    borderRadius: "16px",
+                    fontSize: "11px",
+                    border: "1px solid #c8e6c9",
+                    maxWidth: "200px",
+                    cursor: "pointer"
+                  }}
+                  onClick={() => downloadAttachment(attachment)}>
+                    <span style={{ fontSize: "12px" }}>📎</span>
+                    <span style={{ 
+                      overflow: "hidden", 
+                      textOverflow: "ellipsis",
+                      whiteSpace: "nowrap",
+                      color: "#0c1a4b",
+                      textDecoration: "underline"
+                    }}>
+                      {attachment.name || 'Attachment'}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            );
+          })()}
+        </div>
+      )}
+
+      {/* ===== NESTED SUB-INDICATORS DISPLAY SECTION - ADD THIS ===== */}
+      {sub.nestedSubIndicators && sub.nestedSubIndicators.length > 0 && (
+        <div className="nested-reference-wrapper" style={{ marginLeft: "30px", marginTop: "10px" }}>
+          {sub.nestedSubIndicators.map((nested, nestedIndex) => {
+            const nestedAnswerKey = `${record.firebaseKey}_sub_${index}_nested_${nestedIndex}_${nested.title}`;
+            const nestedAnswer = lgu.data?.[nestedAnswerKey];
+            
+            return (
+              <div key={nested.id || nestedIndex} className="nested-reference-item" style={{ marginBottom: "15px" }}>
+                <div className="nested-reference-row" style={{ display: "flex", border: "1px solid #cfcfcf" }}>
+                  <div className="nested-reference-label" style={{ 
+                    width: "45%", 
+                    background: "#fff6f6", 
+                    padding: "8px 12px",
+                    fontWeight: 500,
+                    borderRight: "1px solid #cfcfcf"
+                  }}>
+                    {nested.title || 'Untitled'}
+                  </div>
+                  <div className="nested-reference-field" style={{ 
+                    width: "55%", 
+                    padding: "8px 12px",
+                    background: "#ffffff"
+                  }}>
+                    {/* Nested Multiple Choice */}
+                    {nested.fieldType === "multiple" && nested.choices?.map((choice, i) => {
+                      const nestedChoiceKey = `${record.firebaseKey}_sub_${index}_nested_${nestedIndex}_${nested.title}`;
+                      const isSelected = lgu.data?.[nestedChoiceKey]?.value === choice;
+                      
+                      return (
+                        <div key={i} style={{ marginBottom: "4px" }}>
+                          <input 
+                            type="radio" 
+                            checked={isSelected}
+                            disabled 
+                          /> 
+                          <span style={{ marginLeft: "4px" }}>{choice}</span>
                         </div>
                       );
                     })}
+
+                    {/* Nested Checkbox */}
+                    {nested.fieldType === "checkbox" && nested.choices?.map((choice, i) => {
+                      const nestedCheckboxKey = `${record.firebaseKey}_sub_${index}_nested_${nestedIndex}_${nested.title}_${i}`;
+                      const isChecked = lgu.data?.[nestedCheckboxKey]?.value === true;
+                      
+                      return (
+                        <div key={i} style={{ marginBottom: "4px" }}>
+                          <input 
+                            type="checkbox" 
+                            checked={isChecked}
+                            disabled 
+                          /> 
+                          <span style={{ marginLeft: "4px" }}>{choice}</span>
+                        </div>
+                      );
+                    })}
+
+                    {/* Nested Short Answer */}
+                    {nested.fieldType === "short" && (
+                      <div>
+                        {nestedAnswer?.value ? (
+                          <span>{nestedAnswer.value}</span>
+                        ) : (
+                          <span style={{ fontStyle: "italic", color: "gray" }}>
+                            No answer provided
+                          </span>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Nested Integer */}
+                    {nested.fieldType === "integer" && (
+                      <div>
+                        {nestedAnswer?.value ? (
+                          <span>{nestedAnswer.value}</span>
+                        ) : (
+                          <span style={{ fontStyle: "italic", color: "gray" }}>
+                            No answer provided
+                          </span>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Nested Date */}
+                    {nested.fieldType === "date" && (
+                      <div>
+                        {nestedAnswer?.value ? (
+                          <span>
+                            {new Date(nestedAnswer.value).toLocaleDateString("en-US", {
+                              year: "numeric",
+                              month: "long",
+                              day: "numeric",
+                            })}
+                          </span>
+                        ) : (
+                          <span style={{ fontStyle: "italic", color: "gray" }}>
+                            No answer provided
+                          </span>
+                        )}
+                      </div>
+                    )}
+
+                    {/* No field type selected */}
+                    {!nested.fieldType && (
+                      <span style={{ fontStyle: "italic", color: "gray" }}>
+                        No field type selected
+                      </span>
+                    )}
                   </div>
-                ))
-              ) : (
-                <p style={{ textAlign: "center", marginTop: "20px" }}>
-                  No indicators available for this assessment.
-                </p>
-              )}
-            </div>
-          ))
+                </div>
+                
+                {/* Verification for nested sub-indicator */}
+                {nested.verification && (
+                  <div className="nested-verification" style={{
+                    padding: "6px 12px",
+                    background: "#ffffff",
+                    border: "1px solid #cfcfcf",
+                    borderTop: "none",
+                    fontSize: "11px"
+                  }}>
+                    <span style={{ fontWeight: 700, marginRight: "6px", color: "#081a4b" }}>
+                      Mode of Verification:
+                    </span>
+                    <span style={{ fontStyle: "italic" }}>
+                      {nested.verification}
+                    </span>
+                    
+                    {/* Attachments for nested sub-indicator */}
+                    {(() => {
+                      const nestedIndicatorId = `${record.firebaseKey}_sub_${index}_nested_${nestedIndex}_${nested.title}`;
+                      const nestedAttachments = lgu.attachmentsByIndicator?.[nestedIndicatorId] || [];
+                      
+                      return nestedAttachments.length > 0 && (
+                        <div style={{
+                          display: "flex",
+                          flexWrap: "wrap",
+                          gap: "8px",
+                          marginTop: "8px",
+                          width: "100%"
+                        }}>
+                          {nestedAttachments.map((attachment, idx) => (
+                            <div key={idx} style={{
+                              display: "flex",
+                              alignItems: "center",
+                              gap: "6px",
+                              backgroundColor: "#e8f5e9",
+                              padding: "4px 10px",
+                              borderRadius: "16px",
+                              fontSize: "11px",
+                              border: "1px solid #c8e6c9",
+                              maxWidth: "200px",
+                              cursor: "pointer"
+                            }}
+                            onClick={() => downloadAttachment(attachment)}>
+                              <span style={{ fontSize: "12px" }}>📎</span>
+                              <span style={{ 
+                                overflow: "hidden", 
+                                textOverflow: "ellipsis",
+                                whiteSpace: "nowrap",
+                                color: "#0c1a4b",
+                                textDecoration: "underline"
+                              }}>
+                                {attachment.name || 'Attachment'}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      );
+                    })()}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+})}
+
+                    </div>
+                  ))
+                ) : (
+                  <p style={{ textAlign: "center", marginTop: "20px" }}>
+                    No indicators available for this tab.
+                  </p>
+                )}
+              </div>
+            );
+          })
         ) : (
           <div>
             <p style={{ textAlign: "center", marginTop: "20px" }}>

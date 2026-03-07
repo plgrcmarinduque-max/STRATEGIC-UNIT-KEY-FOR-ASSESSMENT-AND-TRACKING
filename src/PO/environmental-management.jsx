@@ -14,6 +14,7 @@ export default function EM() {
   const navigate = useNavigate();
   const [currentPage, setCurrentPage] = useState(1);
   const rowsPerPage = 10;
+  const [submissionDeadline, setSubmissionDeadline] = useState("");
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [isSavingIndicator, setIsSavingIndicator] = useState(false);
@@ -30,15 +31,55 @@ export default function EM() {
   
   const [activeItem, setActiveItem] = useState(""); 
   const [formError, setFormError] = useState("");
+  
   // Remove Main Indicator
   const removeMainIndicator = (id) => {
     setMainIndicators((prev) => prev.filter((main) => main.id !== id));
   };
 
-  // Remove Sub Indicator
+  // Remove Sub Indicator (top level)
   const removeSubIndicator = (id) => {
     setSubIndicators((prev) => prev.filter((sub) => sub.id !== id));
   };
+
+// Add these after the existing state declarations (around line 30-60)
+const [activeCategory, setActiveCategory] = useState("financial");
+const [categoryData, setCategoryData] = useState({});
+
+// Category display names and their corresponding database paths
+const categories = [
+  { id: "financial", name: "Financial Administration and Sustainability", dbPath: "financial" },
+  { id: "disaster", name: "Disaster Preparedness", dbPath: "disaster" },
+  { id: "social", name: "Social Protection and Sensitivity", dbPath: "social" },
+  { id: "health", name: "Health Compliance and Responsiveness", dbPath: "health" },
+  { id: "education", name: "Sustainable Education", dbPath: "education" },
+  { id: "business", name: "Business Friendliness and Competitiveness", dbPath: "business" },
+  { id: "safety", name: "Safety, Peace and Order", dbPath: "safety" },
+  { id: "environmental", name: "Environmental Management", dbPath: "environmental" },
+  { id: "tourism", name: "Tourism, Heritage Development, Culture and Arts", dbPath: "tourism" },
+  { id: "youth", name: "Youth Development", dbPath: "youth" }
+];
+
+// Get current category object
+const currentCategory = categories.find(c => c.id === activeCategory) || categories[0];
+
+  // Remove Nested Sub Indicator
+  const removeNestedSubIndicator = (parentId, nestedId) => {
+    setSubIndicators((prev) =>
+      prev.map((sub) => {
+        if (sub.id === parentId) {
+          return {
+            ...sub,
+            nestedSubIndicators: (sub.nestedSubIndicators || []).filter(
+              (nested) => nested.id !== nestedId
+            ),
+          };
+        }
+        return sub;
+      })
+    );
+  };
+
   const initialMainIndicators = [
     {
       id: 1,
@@ -56,8 +97,10 @@ export default function EM() {
       fieldType: "",
       choices: [],
       verification: "",
+      nestedSubIndicators: [], // Add nested sub-indicators array
     },
   ];
+  
   const [mainIndicators, setMainIndicators] = useState(initialMainIndicators);
   const [subIndicators, setSubIndicators] = useState(initialSubIndicators);
 
@@ -104,8 +147,31 @@ const handleYD = () => {
   navigate("/youth-development", { state: { year: selectedYear } });
 };
 
+const handleCategoryChange = (categoryId) => {
+  setActiveCategory(categoryId);
+  // Update URL to match the category page
+  const category = categories.find(c => c.id === categoryId);
+  navigate(`/${category.dbPath}-administration-and-sustainability`, { 
+    state: { year: selectedYear }, 
+    replace: true 
+  });
+};
 
-
+// Save submission deadline to database
+const saveSubmissionDeadline = async () => {
+  if (!auth.currentUser || !selectedYear || !submissionDeadline) return;
+  
+  try {
+    const deadlineRef = ref(
+      db,
+      `environmental/${auth.currentUser.uid}/${selectedYear}/metadata/deadline`
+    );
+    await set(deadlineRef, submissionDeadline);
+    console.log("Deadline saved successfully");
+  } catch (error) {
+    console.error("Error saving deadline:", error);
+  }
+};
   
 
   // Add Main Indicator
@@ -122,13 +188,133 @@ const addMainIndicator = () => {
   ]);
 };
 
+// Add Nested Sub Indicator
+const addNestedSubIndicator = (parentId) => {
+  setSubIndicators((prev) =>
+    prev.map((sub) => {
+      if (sub.id === parentId) {
+        const nestedSubs = sub.nestedSubIndicators || [];
+        return {
+          ...sub,
+          nestedSubIndicators: [
+            ...nestedSubs,
+            {
+              id: nestedSubs.length + 1,
+              title: "",
+              fieldType: "", // This will always be empty (no choose field)
+              choices: [],
+              verification: "",
+            },
+          ],
+        };
+      }
+      return sub;
+    })
+  );
+};
+
+// Update Nested Sub Indicator
+const updateNestedSubIndicator = (parentId, nestedId, field, value) => {
+  setSubIndicators((prev) =>
+    prev.map((sub) => {
+      if (sub.id === parentId) {
+        return {
+          ...sub,
+          nestedSubIndicators: (sub.nestedSubIndicators || []).map((nested) =>
+            nested.id === nestedId ? { ...nested, [field]: value } : nested
+          ),
+        };
+      }
+      return sub;
+    })
+  );
+};
+
+// Update Nested Sub Indicator choices
+const updateNestedChoice = (parentId, nestedId, index, value) => {
+  setSubIndicators((prev) =>
+    prev.map((sub) => {
+      if (sub.id === parentId) {
+        return {
+          ...sub,
+          nestedSubIndicators: (sub.nestedSubIndicators || []).map((nested) => {
+            if (nested.id === nestedId) {
+              const updatedChoices = [...(nested.choices || [])];
+              updatedChoices[index] = value;
+              return { ...nested, choices: updatedChoices };
+            }
+            return nested;
+          }),
+        };
+      }
+      return sub;
+    })
+  );
+};
+
+// Add choice to nested sub indicator
+const addNestedChoice = (parentId, nestedId) => {
+  setSubIndicators((prev) =>
+    prev.map((sub) => {
+      if (sub.id === parentId) {
+        return {
+          ...sub,
+          nestedSubIndicators: (sub.nestedSubIndicators || []).map((nested) =>
+            nested.id === nestedId
+              ? { ...nested, choices: [...(nested.choices || []), ""] }
+              : nested
+          ),
+        };
+      }
+      return sub;
+    })
+  );
+};
+
+// Remove choice from nested sub indicator
+const removeNestedChoice = (parentId, nestedId, index) => {
+  setSubIndicators((prev) =>
+    prev.map((sub) => {
+      if (sub.id === parentId) {
+        return {
+          ...sub,
+          nestedSubIndicators: (sub.nestedSubIndicators || []).map((nested) => {
+            if (nested.id === nestedId) {
+              const filtered = (nested.choices || []).filter((_, i) => i !== index);
+              return { ...nested, choices: filtered };
+            }
+            return nested;
+          }),
+        };
+      }
+      return sub;
+    })
+  );
+};
+
 // Open modal to edit a specific record
 const handleEditRecord = (record) => {
-  setMainIndicators(record.mainIndicators || []);
-  setSubIndicators(record.subIndicators || []);
-  setShowModal(true);
+  // Make deep copies of the indicators to avoid reference issues
+  const mainIndicatorsCopy = record.mainIndicators ? 
+    record.mainIndicators.map(main => ({
+      ...main,
+      choices: main.choices ? [...main.choices] : []
+    })) : [];
+  
+  const subIndicatorsCopy = record.subIndicators ? 
+    record.subIndicators.map(sub => ({
+      ...sub,
+      choices: sub.choices ? [...sub.choices] : [],
+      nestedSubIndicators: sub.nestedSubIndicators ? 
+        sub.nestedSubIndicators.map(nested => ({
+          ...nested,
+          choices: nested.choices ? [...nested.choices] : []
+        })) : []
+    })) : [];
 
-  // Store the Firebase key of the record being edited
+  setMainIndicators(mainIndicatorsCopy);
+  setSubIndicators(subIndicatorsCopy);
+  setShowModal(true);
   setEditRecordKey(record.firebaseKey);
 };
 
@@ -158,21 +344,25 @@ const [editRecordKey, setEditRecordKey] = useState(null);
 const handleAddIndicator = () => {
   if (!isIndicatorValid()) return;
 
+  // Make sure nestedSubIndicators are included
+  const subIndicatorsToSave = subIndicators.map(sub => ({
+    ...sub,
+    nestedSubIndicators: sub.nestedSubIndicators || []
+  }));
+
   const newRecord = {
-    firebaseKey: editRecordKey || Date.now().toString(), // temporary key
+    firebaseKey: editRecordKey || Date.now().toString(),
     mainIndicators,
-    subIndicators,
+    subIndicators: subIndicatorsToSave,  // Use the mapped version
     createdAt: Date.now(),
   };
 
   setData((prev) => {
     if (editRecordKey) {
-      // Update existing local record
       return prev.map((item) =>
         item.firebaseKey === editRecordKey ? newRecord : item
       );
     } else {
-      // Add new local record
       return [...prev, newRecord];
     }
   });
@@ -183,6 +373,7 @@ const handleAddIndicator = () => {
   setShowModal(false);
   setEditRecordKey(null);
 };
+
 
 
 // Update Main Indicator
@@ -199,6 +390,7 @@ const updateMainChoice = (mainId, index, value) => {
   setMainIndicators((prev) =>
     prev.map((main) => {
       if (main.id === mainId) {
+        // Create a new array for choices to ensure React detects the change
         const updatedChoices = [...main.choices];
         updatedChoices[index] = value;
         return { ...main, choices: updatedChoices };
@@ -283,6 +475,31 @@ useEffect(() => {
   });
 }, [selectedYear]);
 
+// Load submission deadline for the selected year
+useEffect(() => {
+  if (!auth.currentUser || !selectedYear) return;
+
+  const loadSubmissionDeadline = async () => {
+    try {
+      const deadlineRef = ref(
+        db,
+        `environmental/${auth.currentUser.uid}/${selectedYear}/metadata/deadline`
+      );
+      
+      onValue(deadlineRef, (snapshot) => {
+        if (snapshot.exists()) {
+          setSubmissionDeadline(snapshot.val());
+        } else {
+          setSubmissionDeadline("");
+        }
+      });
+    } catch (error) {
+      console.error("Error loading deadline:", error);
+    }
+  };
+
+  loadSubmissionDeadline();
+}, [selectedYear]);
 
 const handleSaveChanges = async () => {
   if (!auth.currentUser || isSavingIndicator || !selectedYear) return;
@@ -311,6 +528,11 @@ const handleSaveChanges = async () => {
     }
 
     await set(yearRef, updatedData);
+    
+    // Save the submission deadline
+    if (submissionDeadline) {
+      await saveSubmissionDeadline();
+    }
 
     setShowSaveConfirm(false);
     alert(`Changes saved for year ${selectedYear}`);
@@ -379,6 +601,7 @@ const handleSignOut = () => {
         fieldType: "",
         choices: [],
         verification: "",
+        nestedSubIndicators: [],
       },
     ]);
   };
@@ -396,14 +619,15 @@ const handleSignOut = () => {
 
   // Handler to update choices for multiple or checkbox types
   const updateChoice = (subId, index, value) => {
-    setSubIndicators((prev) =>
-      prev.map((sub) => {
-        if (sub.id === subId) {
-          const updatedChoices = [...sub.choices];
-          updatedChoices[index] = value;
-          return { ...sub, choices: updatedChoices };
-        }
-        return sub;
+  setSubIndicators((prev) =>
+    prev.map((sub) => {
+      if (sub.id === subId) {
+        // Create a new array for choices to ensure React detects the change
+        const updatedChoices = [...sub.choices];
+        updatedChoices[index] = value;
+        return { ...sub, choices: updatedChoices };
+      }
+      return sub;
       })
     );
   };
@@ -437,13 +661,16 @@ const handleSignOut = () => {
 const isIndicatorValid = () => {
   const validateField = (indicator) => {
     if (!indicator.title.trim()) return false;
-    if (!indicator.fieldType) return false;
+    
+    // Only validate fieldType if it exists (main indicators and top-level sub-indicators)
+    // Nested sub-indicators don't need fieldType validation
+    if (indicator.fieldType !== undefined && !indicator.fieldType) return false;
 
     if (
       indicator.fieldType === "multiple" ||
       indicator.fieldType === "checkbox"
     ) {
-      if (!indicator.choices.length) return false;
+      if (!indicator.choices || !indicator.choices.length) return false;
 
       const hasEmptyChoice = indicator.choices.some(
         (choice) => !choice.trim()
@@ -455,8 +682,24 @@ const isIndicatorValid = () => {
     return true;
   };
 
+  const validateNested = (nested) => {
+    if (!nested.title.trim()) return false;
+    // Nested sub-indicators don't need fieldType validation
+    return true;
+  };
+
   const mainValid = mainIndicators.every(validateField);
-  const subValid = subIndicators.every(validateField);
+  const subValid = subIndicators.every((sub) => {
+    // Validate the main sub-indicator
+    if (!validateField(sub)) return false;
+    
+    // Validate all nested sub-indicators
+    if (sub.nestedSubIndicators && sub.nestedSubIndicators.length > 0) {
+      return sub.nestedSubIndicators.every(validateNested);
+    }
+    
+    return true;
+  });
 
   return mainValid && subValid;
 };
@@ -918,43 +1161,31 @@ const isIndicatorValid = () => {
             </div>
       </div>
 
-      {/* RIGHT SELECT */}
-      <select
-        value={main.fieldType}
-          onChange={(e) => {
-            const newType = e.target.value;
+<select
+  value={main.fieldType}
+  onChange={(e) => {
+    const newType = e.target.value;
+    updateMainIndicator(main.id, "fieldType", newType);
+    if (newType !== "multiple" && newType !== "checkbox") {
+      updateMainIndicator(main.id, "choices", []);
+    }
+    if (newType !== "date") {
+      updateMainIndicator(main.id, "value", "");
+    }
+  }}
+>
+  <option value="" disabled hidden>
+    Choose field
+  </option>
+  <option value="no-input">No Input Field</option>
+  <option value="integer">Integer/Value</option>
+  <option value="short">Short Answer</option>
+  <option value="multiple">Multiple Choice</option>
+  <option value="checkbox">Checkboxes</option>
+  <option value="date">Date</option>
+</select>
 
-            updateMainIndicator(main.id, "fieldType", newType);
 
-            if (newType !== "multiple" && newType !== "checkbox") {
-              updateMainIndicator(main.id, "choices", []);
-            }
-
-            if (newType !== "date") {
-              updateMainIndicator(main.id, "value", "");
-            }
-          }}
-      >
-
-        <option value="" disabled hidden>
-          Choose field
-        </option>
-        <option value="integer">
-          Integer/Value
-        </option>
-        <option value="short">
-          Short Answer
-        </option>
-        <option value="multiple">
-          Multiple Choice
-        </option>
-        <option value="checkbox">
-          Checkboxes
-        </option>
-        <option value="date">
-          Date
-        </option>
-      </select>
         <button
           type="button"
           className="mainindicator-delete-btn"
@@ -967,7 +1198,7 @@ const isIndicatorValid = () => {
 ))}
         </div>
 
-        {/* main INDICATOR SECTION */}
+        {/* SUB-INDICATOR SECTION */}
         <div className="sub-section">
           <h4>SUB-INDICATOR/S</h4>
 
@@ -988,7 +1219,7 @@ const isIndicatorValid = () => {
           }
         />
 
-        {/* Dynamic Field Rendering */}
+        {/* Dynamic Field Rendering for main sub-indicator */}
         {sub.fieldType === "date" && (
           <input
             type="date"
@@ -1001,7 +1232,6 @@ const isIndicatorValid = () => {
 
         {sub.fieldType === "multiple" && (
           <div className="multiple-wrapper">
-
             {sub.choices.map((choice, index) => (
               <div key={index} className="choice-row">
                 <input type="radio" disabled />
@@ -1022,7 +1252,6 @@ const isIndicatorValid = () => {
                 </button>
               </div>
             ))}
-
             <button
               type="button"
               className="add-choice-btn"
@@ -1031,7 +1260,6 @@ const isIndicatorValid = () => {
               <input type="radio" disabled className="add-radio" />
               <span>+ Add Option</span>
             </button>
-
           </div>
         )}
 
@@ -1057,7 +1285,6 @@ const isIndicatorValid = () => {
                 </button>
               </div>
             ))}
-
             <button
               type="button"
               className="add-choice-btn"
@@ -1066,7 +1293,6 @@ const isIndicatorValid = () => {
               <input type="checkbox" disabled className="add-radio" />
               <span>+ Add Option</span>
             </button>
-
           </div>
         )}
 
@@ -1089,55 +1315,245 @@ const isIndicatorValid = () => {
           </div>
         )}
 
-            <div className="verification-row">
-              <label className="verification-label">
-                Mode of Verification:
-              </label>
+        <div className="verification-row">
+          <label className="verification-label">
+            Mode of Verification:
+          </label>
+          <input
+            type="text"
+            className="verification-input"
+            value={sub.verification}
+            onChange={(e) =>
+              updateSubIndicator(sub.id, "verification", e.target.value)
+            }
+          />
+        </div>
+        
+{/* Nested Sub-Indicators */}
+{sub.nestedSubIndicators && sub.nestedSubIndicators.length > 0 && (
+  <div className="nested-sub-indicators">
+    {sub.nestedSubIndicators.map((nested) => (
+      <div key={nested.id} className="nested-sub-card">
+        <div className="nested-sub-header">
+          {/* LEFT COLUMN - Nested */}
+          <div className="nested-sub-left" style={{ 
+            flex: 1, 
+            maxWidth: "calc(100% - 80px)",
+            width: "500px"
+          }}>
+            {/* Title input - using nested-title-input class */}
+            <input
+              type="text"
+              className="nested-title-input"
+              placeholder="Nested sub-indicator title . . . ."
+              value={nested.title}
+              onChange={(e) =>
+                updateNestedSubIndicator(sub.id, nested.id, "title", e.target.value)
+              }
+              style={{ width: "100%", maxWidth: "650px" }}
+            />
 
+            {/* Dynamic Field Rendering for nested sub-indicator */}
+            {nested.fieldType === "date" && (
               <input
-                type="text"
-                className="verification-input"
-                value={sub.verification}
+                type="date"
+                className="nested-date-field"
                 onChange={(e) =>
-                  updateSubIndicator(sub.id, "verification", e.target.value)
+                  updateNestedSubIndicator(sub.id, nested.id, "value", e.target.value)
                 }
+                style={{ width: "100%", maxWidth: "650px" }}
               />
-            </div>
+            )}
+
+            {nested.fieldType === "multiple" && (
+              <div className="nested-multiple-wrapper" style={{ 
+                width: "100%", 
+                maxWidth: "650px"
+              }}>
+                {(nested.choices || []).map((choice, idx) => (
+                  <div key={idx} className="nested-choice-row">
+                    <input type="radio" disabled />
+                    <input
+                      type="text"
+                      placeholder="Enter choice"
+                      value={choice}
+                      onChange={(e) =>
+                        updateNestedChoice(sub.id, nested.id, idx, e.target.value)
+                      }
+                    />
+                    <button
+                      type="button"
+                      className="nested-remove-choice-btn"
+                      onClick={() => removeNestedChoice(sub.id, nested.id, idx)}
+                    >
+                      ✕
+                    </button>
+                  </div>
+                ))}
+
+                <button
+                  type="button"
+                  className="nested-add-choice-btn"
+                  onClick={() => addNestedChoice(sub.id, nested.id)}
+                >
+                  <input type="radio" disabled className="nested-add-radio" />
+                  <span>+ Add Option</span>
+                </button>
+              </div>
+            )}
+
+            {nested.fieldType === "checkbox" && (
+              <div className="nested-multiple-wrapper" style={{ 
+                width: "100%", 
+                maxWidth: "650px"
+              }}>
+                {(nested.choices || []).map((choice, idx) => (
+                  <div key={idx} className="nested-choice-row">
+                    <input type="checkbox" disabled />
+                    <input
+                      type="text"
+                      placeholder="Enter choice"
+                      value={choice}
+                      onChange={(e) =>
+                        updateNestedChoice(sub.id, nested.id, idx, e.target.value)
+                      }
+                    />
+                    <button
+                      type="button"
+                      className="nested-remove-choice-btn"
+                      onClick={() => removeNestedChoice(sub.id, nested.id, idx)}
+                    >
+                      ✕
+                    </button>
+                  </div>
+                ))}
+
+                <button
+                  type="button"
+                  className="nested-add-choice-btn"
+                  onClick={() => addNestedChoice(sub.id, nested.id)}
+                >
+                  <input type="checkbox" disabled className="nested-add-radio" />
+                  <span>+ Add Option</span>
+                </button>
+              </div>
+            )}
+
+            {nested.fieldType === "short" && (
+              <div className="nested-short-wrapper" style={{ 
+                width: "100%", 
+                maxWidth: "650px"
+              }}>
+                <textarea
+                  className="nested-short-field"
+                  placeholder="Empty Field"
+                  style={{ width: "100%" }}
+                />
+              </div>
+            )}
+
+            {nested.fieldType === "integer" && (
+              <div className="nested-integer-wrapper" style={{ 
+                width: "100%", 
+                maxWidth: "650px"
+              }}>
+                <input
+                  type="number"
+                  className="nested-integer-field"
+                  placeholder="Empty Field"
+                  style={{ width: "100%" }}
+                />
+              </div>
+            )}
+
+            {/* MODE OF VERIFICATION REMOVED */}
+            
+          </div>
+
+<select
+  className="nested-select-field"
+  value={nested.fieldType}
+  onChange={(e) => {
+    const newType = e.target.value;
+    updateNestedSubIndicator(sub.id, nested.id, "fieldType", newType);
+    if (newType !== "multiple" && newType !== "checkbox") {
+      updateNestedSubIndicator(sub.id, nested.id, "choices", []);
+    }
+    if (newType !== "date") {
+      updateNestedSubIndicator(sub.id, nested.id, "value", "");
+    }
+  }}
+>
+  <option value="" disabled hidden>
+    Choose field
+  </option>
+  <option value="no-input">No Input Field</option> {/* ADD THIS LINE */}
+  <option value="integer">Integer/Value</option>
+  <option value="short">Short Answer</option>
+  <option value="multiple">Multiple Choice</option>
+  <option value="checkbox">Checkboxes</option>
+  <option value="date">Date</option>
+</select>
+          
+          <button
+            type="button"
+            className="nested-delete-btn"
+            onClick={() => removeNestedSubIndicator(sub.id, nested.id)}
+          >
+            ✕
+          </button>
+        </div>
       </div>
+    ))}
+  </div>
+)}
 
-      {/* RIGHT SIDE SELECT */}
-      <select
-        value={sub.fieldType}
-          onChange={(e) => {
-            const newType = e.target.value;
-
-            updateSubIndicator(sub.id, "fieldType", newType);
-
-            if (newType !== "multiple" && newType !== "checkbox") {
-              updateSubIndicator(sub.id, "choices", []);
-            }
-
-            if (newType !== "date") {
-              updateSubIndicator(sub.id, "value", "");
-            }
-          }}
-      >
-        <option value="" disabled hidden>
-          Choose field
-        </option>
-        <option value="integer">Integer/Value</option>
-        <option value="short">Short Answer</option>
-        <option value="multiple">Multiple Choice</option>
-        <option value="checkbox">Checkboxes</option>
-        <option value="date">Date</option>
-      </select>
+        {/* Add Nested Sub-Indicator Button */}
         <button
           type="button"
-          className="subindicator-delete-btn"
-          onClick={() => removeSubIndicator(sub.id)}
+          className="add-nested-sub-btn"
+          onClick={() => addNestedSubIndicator(sub.id)}
         >
-          ✕
+          <span className="subplus-icon">＋</span>
+          New Sub-Indicator
         </button>
+
+      </div>
+
+
+<select
+  value={sub.fieldType}
+  onChange={(e) => {
+    const newType = e.target.value;
+    updateSubIndicator(sub.id, "fieldType", newType);
+    if (newType !== "multiple" && newType !== "checkbox") {
+      updateSubIndicator(sub.id, "choices", []);
+    }
+    if (newType !== "date") {
+      updateSubIndicator(sub.id, "value", "");
+    }
+  }}
+>
+  <option value="" disabled hidden>
+    Choose field
+  </option>
+  <option value="no-input">No Input Field</option>
+  <option value="integer">Integer/Value</option>
+  <option value="short">Short Answer</option>
+  <option value="multiple">Multiple Choice</option>
+  <option value="checkbox">Checkboxes</option>
+  <option value="date">Date</option>
+</select>
+
+
+      {/* Main sub-indicator delete button */}
+      <button
+        type="button"
+        className="subindicator-delete-btn"
+        onClick={() => removeSubIndicator(sub.id)}
+      >
+        ✕
+      </button>
     </div>
   </div>
 ))}
@@ -1196,31 +1612,54 @@ const isIndicatorValid = () => {
             </div>
           </div>
 
-          <div className="action-bar">
-          <button 
-            className="savechanges-btn" 
-            onClick={() => setShowSaveConfirm(true)}
-          >
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                width="18"
-                height="18"
-                viewBox="0 0 24 24"
-                fill="currentColor"
-            >
-                <path d="M17 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2
-                2 0 0 0 2-2V7l-4-4zM12 19a3 3 0 1 1 0-6 3 3 0 0 1
-                0 6zM6 8V5h9v3H6z"/>
-            </svg>
-            Save Changes
-          </button>
-          </div>
+<div className="action-bar" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+  {/* Left side - Submission Deadline box */}
+  <div className="deadline-container" style={{ display: "flex", alignItems: "center", gap: "10px",marginLeft: "10px" }}>
+    <label htmlFor="submission-deadline" style={{ fontWeight: "700", color: "#000000" }}>
+      Submission Deadline:
+    </label>
+    <input
+      type="date"
+      id="submission-deadline"
+      className="deadline-input"
+      value={submissionDeadline}
+      onChange={(e) => setSubmissionDeadline(e.target.value)}
+      style={{
+        padding: "5px 12px",
+        borderRadius: "4px",
+        border: "1px solid #ccc",
+        fontSize: "14px",
+        backgroundColor: "#fff",
+        cursor: "pointer",
+      }}
+    />
+  </div>
+
+  {/* Right side - Save Changes button */}
+  <button 
+    className="savechanges-btn" 
+    onClick={() => setShowSaveConfirm(true)}
+  >
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      width="18"
+      height="18"
+      viewBox="0 0 24 24"
+      fill="currentColor"
+    >
+      <path d="M17 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2
+      2 0 0 0 2-2V7l-4-4zM12 19a3 3 0 1 1 0-6 3 3 0 0 1
+      0 6zM6 8V5h9v3H6z"/>
+    </svg>
+    Save Changes
+  </button>
+</div>
 
           {/* Table */}
 <div className="financialtable-box">
   <div className="financialtable-header">
     <h3 className="table-title">
-      Environmental Management
+      Financial Administration and Sustainability
     </h3>
   </div>
 
@@ -1356,6 +1795,67 @@ const isIndicatorValid = () => {
         <span className="reference-verification-value">{sub.verification}</span>
       </div>
     )}
+
+{/* Display nested sub-indicators */}
+{sub.nestedSubIndicators && sub.nestedSubIndicators.length > 0 && (
+  <div className="nested-reference-wrapper">
+    {sub.nestedSubIndicators.map((nested, nestedIndex) => (
+      <div key={nested.id || nestedIndex} className="nested-reference-item">
+        <div className="nested-reference-row">
+          <div className="nested-reference-label">
+            {nested.title || 'Untitled'}
+          </div>
+          <div className="nested-reference-field">
+            {nested.fieldType === "multiple" && nested.choices?.map((choice, i) => (
+              <div key={i}>
+                <input type="radio" disabled /> {choice || <span style={{ fontStyle: "italic", color: "gray" }}>Empty Option</span>}
+              </div>
+            ))}
+
+            {nested.fieldType === "checkbox" && nested.choices?.map((choice, i) => (
+              <div key={i}>
+                <input type="checkbox" disabled /> {choice || <span style={{ fontStyle: "italic", color: "gray" }}>Empty Option</span>}
+              </div>
+            ))}
+
+            {nested.fieldType === "short" && (
+              <span style={{ fontStyle: "italic", color: "gray" }}>Empty Field</span>
+            )}
+
+            {nested.fieldType === "integer" && (
+              <span style={{ fontStyle: "italic", color: "gray" }}>Empty Field</span>
+            )}
+
+            {nested.fieldType === "date" && (
+              <span style={{ fontStyle: "italic", color: "gray" }}>
+                {nested.value
+                  ? new Date(nested.value).toLocaleDateString("en-US", {
+                      year: "numeric",
+                      month: "long",
+                      day: "numeric",
+                    })
+                  : "Empty Field"}
+              </span>
+            )}
+
+            {!nested.fieldType && (
+              <span style={{ fontStyle: "italic", color: "gray" }}>No field type selected</span>
+            )}
+          </div>
+        </div>
+        
+        {nested.verification && (
+          <div className="nested-verification">
+            <span className="verification-label">Mode of Verification:</span>
+            <span className="verification-value">{nested.verification}</span>
+          </div>
+        )}
+      </div>
+    ))}
+  </div>
+)}
+
+
   </div>
 ))}
     </div>

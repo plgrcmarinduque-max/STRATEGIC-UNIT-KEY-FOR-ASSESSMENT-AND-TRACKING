@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { db, auth} from "src/firebase";
 import "src/PO-CSS/dashboard.css";
 import dilgLogo from "src/assets/dilg-po.png";
@@ -15,8 +15,6 @@ export default function Dashboard() {
 const [loadingVerified, setLoadingVerified] = useState(true);
 const [loadingForwarded, setLoadingForwarded] = useState(true);
 const [userRoleMap, setUserRoleMap] = useState({}); // Store user roles
-const [searchResults, setSearchResults] = useState([]); // For search suggestions
-const [showSearchDropdown, setShowSearchDropdown] = useState(false);
   const navigate = useNavigate();
   const [currentPage, setCurrentPage] = useState(1);
   const rowsPerPage = 10;
