@@ -12,7 +12,7 @@ export default function POView() {
   const location = useLocation();
   const navigate = useNavigate();
   const [forwardedAssessment, setForwardedAssessment] = useState(null);
-  const [verifiedFlag, setVerifiedFlag] = useState(null);
+  const [verifiedFlag, setVerifiedFlag] = useState({}); // CHANGED: object per tab
   const [isVerified, setIsVerified] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const lguName = location.state.lguName || location.state.municipality; 
@@ -27,7 +27,7 @@ export default function POView() {
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [showEditProfileModal, setShowEditProfileModal] = useState(false);
   
-  // State for ALL indicators (10 categories) - ADD THESE
+  // State for ALL indicators (10 categories)
   const [indicators, setIndicators] = useState([]); // Financial
   const [disasterIndicators, setDisasterIndicators] = useState([]);
   const [socialIndicators, setSocialIndicators] = useState([]);
@@ -39,7 +39,7 @@ export default function POView() {
   const [tourismIndicators, setTourismIndicators] = useState([]);
   const [youthIndicators, setYouthIndicators] = useState([]);
   
-  const [activeTab, setActiveTab] = useState(1); // ADD THIS
+  const [activeTab, setActiveTab] = useState(1);
   const [userRole, setUserRole] = useState(null);
   const [userMunicipality, setUserMunicipality] = useState("");
   const [loading, setLoading] = useState(true);
@@ -69,10 +69,27 @@ const [profileData, setProfileData] = useState({
     status: "",
   });
 
-const [remarks, setRemarks] = useState("");
+const [remarks, setRemarks] = useState({}); // CHANGED: object per tab
+
+// Helper function to get tab name
+const getTabName = (tabId) => {
+  switch(tabId) {
+    case 1: return 'Financial';
+    case 2: return 'Disaster';
+    case 3: return 'Social';
+    case 4: return 'Health';
+    case 5: return 'Education';
+    case 6: return 'Business';
+    case 7: return 'Safety';
+    case 8: return 'Environmental';
+    case 9: return 'Tourism';
+    case 10: return 'Youth';
+    default: return 'Financial';
+  }
+};
 
 // Helper function to get the correct answer key with prefix
-const getAnswerKey = (record, mainIndex, field, isSub = false, nestedIndex = null) => {
+const getAnswerKey = (record, mainIndex, field, isSub = false, nestedIndex = null, valueType = "default") => {
   const prefixMap = {
     1: 'financial_',
     2: 'disaster_',
@@ -89,15 +106,41 @@ const getAnswerKey = (record, mainIndex, field, isSub = false, nestedIndex = nul
   const prefix = prefixMap[activeTab] || '';
   
   if (nestedIndex !== null) {
+    if (valueType === "radio") return `${prefix}${record.firebaseKey}_sub_${mainIndex}_nested_${nestedIndex}_radio_${field}`;
+    if (valueType === "checkbox") return `${prefix}${record.firebaseKey}_sub_${mainIndex}_nested_${nestedIndex}_checkbox_${field}`;
     return `${prefix}${record.firebaseKey}_sub_${mainIndex}_nested_${nestedIndex}_${field}`;
   } else if (isSub) {
+    if (valueType === "radio") return `${prefix}${record.firebaseKey}_sub_${mainIndex}_radio_${field}`;
+    if (valueType === "checkbox") return `${prefix}${record.firebaseKey}_sub_${mainIndex}_checkbox_${field}`;
     return `${prefix}${record.firebaseKey}_sub_${mainIndex}_${field}`;
   } else {
+    if (valueType === "radio") return `${prefix}${record.firebaseKey}_${mainIndex}_radio_${field}`;
+    if (valueType === "checkbox") return `${prefix}${record.firebaseKey}_${mainIndex}_checkbox_${field}`;
     return `${prefix}${record.firebaseKey}_${mainIndex}_${field}`;
   }
 };
 
-const handleTabChange = (tabId) => { // ADD THIS
+// Radio answers are saved as index strings ("0","1","2"...). Keep fallback to legacy saved values.
+const isRadioSelected = (answerValue, choice, choiceIndex) => {
+  const saved = String(answerValue ?? "");
+  if (saved === String(choiceIndex)) return true;
+
+  const choiceLabel =
+    choice && typeof choice === "object"
+      ? (choice.label ?? choice.value ?? choice.name ?? choice.title ?? choice.text ?? "")
+      : choice;
+  const choiceValueRaw =
+    choice && typeof choice === "object"
+      ? (choice.value ?? choice.label ?? choice.name ?? choice.title ?? choice.text ?? "")
+      : choice;
+
+  if (choiceValueRaw !== "" && choiceValueRaw !== null && choiceValueRaw !== undefined && saved === String(choiceValueRaw)) return true;
+  if (choiceLabel !== "" && choiceLabel !== null && choiceLabel !== undefined && saved === String(choiceLabel)) return true;
+
+  return false;
+};
+
+const handleTabChange = (tabId) => {
   setActiveTab(tabId);
 };
 
@@ -157,7 +200,7 @@ const handleVerifyAssessment = async () => {
         verifiedAt: Date.now(),
         verifiedBy: auth.currentUser?.email,
         verifiedByName: profileData.name || auth.currentUser?.email,
-        remarks: remarks || "Assessment verified"
+        remarks: remarks[activeTab] || "Assessment verified" // CHANGED: use tab-specific remarks
         
         // NO forwarding or return flags here
       };
@@ -185,7 +228,7 @@ const handleVerifyAssessment = async () => {
       deadline: lgu.deadline,
       submittedBy: lgu.submittedBy,
       forwardedBy: forwardedAssessment.forwardedBy,
-      remarks: remarks || "Assessment verified",
+      remarks: remarks[activeTab] || "Assessment verified", // CHANGED: use tab-specific remarks
       attachmentsByIndicator: lgu.attachmentsByIndicator || {}
     };
     
@@ -211,7 +254,7 @@ const handleVerifyAssessment = async () => {
       }
     }
     
-    // 4. Create a notification for the MLGO
+// 4. Create a notification for the MLGO
 const mlgoNotificationRef = ref(db, `notifications/${selectedYear}/MLGO/${mlgoUid}`);
 const mlgoNotificationId = Date.now().toString();
 const mlgoNotificationData = {
@@ -224,8 +267,10 @@ const mlgoNotificationData = {
   timestamp: Date.now(),
   read: false,
   year: selectedYear,
-  municipality: lgu.municipality, // Add municipality
-  action: "view_verified_assessment"
+  municipality: lgu.municipality || "",
+  tabName: getTabName(activeTab) || "",
+  tabRemarks: (remarks && remarks[activeTab]) || "", // FIXED: Provide fallback empty string
+  action: "view_verified_assignment"
 };
 await set(ref(db, `notifications/${selectedYear}/MLGO/${mlgoUid}/${mlgoNotificationId}`), mlgoNotificationData);
 
@@ -243,7 +288,31 @@ if (lguUidForNotification) {
     timestamp: Date.now(),
     read: false,
     year: selectedYear,
-    municipality: lgu.municipality, // Add municipality
+    municipality: lgu.municipality || "",
+    tabName: getTabName(activeTab) || "",
+    tabRemarks: (remarks && remarks[activeTab]) || "", // FIXED: Provide fallback empty string
+    action: "view_verified_assignment"
+  };
+  
+  await set(ref(db, `notifications/${selectedYear}/LGU/${lguUidForNotification}/${lguNotificationId}`), lguNotificationData);
+}
+// 5. Create a notification for the LGU (using UID from metadata)
+if (lguUidForNotification) {
+  const lguNotificationRef = ref(db, `notifications/${selectedYear}/LGU/${lguUidForNotification}`);
+  const lguNotificationId = Date.now().toString();
+  const lguNotificationData = {
+    id: lguNotificationId,
+    type: "assessment_verified",
+    title: `Assessment Form (${selectedYear}) has been verified by the Provincial Office.`,
+    message: `Your assessment has been verified.`,
+    from: auth.currentUser?.email,
+    fromName: profileData.name || auth.currentUser?.email,
+    timestamp: Date.now(),
+    read: false,
+    year: selectedYear,
+    municipality: lgu.municipality,
+    tabName: getTabName(activeTab), // ADDED: include tab name
+    tabRemarks: (remarks && remarks[activeTab]) || "", // ADDED: include tab-specific remarks
     action: "view_verified_assessment"
   };
   
@@ -254,7 +323,7 @@ if (lguUidForNotification) {
     
     alert("Assessment verified successfully!");
     setIsVerified(true);
-    setRemarks("");
+    setRemarks(prev => ({ ...prev, [activeTab]: "" })); // CHANGED: clear tab-specific remarks
     
     // Navigate back to dashboard after successful verification
     navigate("/dashboard");
@@ -271,7 +340,11 @@ if (lguUidForNotification) {
 useEffect(() => {
   const savedFlag = localStorage.getItem('verifiedFlag');
   if (savedFlag) {
-    setVerifiedFlag(JSON.parse(savedFlag));
+    try {
+      setVerifiedFlag(JSON.parse(savedFlag));
+    } catch (e) {
+      console.error("Error parsing saved flags:", e);
+    }
   }
 }, []);
 
@@ -546,116 +619,121 @@ useEffect(() => {
 
   const [data, setData] = useState([]);
 
-const handleReturnAssessment = async () => {
-  // Check both lguAnswers and forwardedAssessment
-  if (!lguAnswers.length || !forwardedAssessment) {
-    console.log("Missing data:", { 
-      lguAnswersLength: lguAnswers.length, 
-      forwardedAssessment: forwardedAssessment 
-    });
-    alert("No assessment data to return. Please make sure you're viewing a forwarded assessment.");
-    return;
-  }
-
-  const confirmReturn = window.confirm(
-    "Are you sure you want to return this assessment to the MLGO? This will make it editable again for them."
-  );
-  
-  if (!confirmReturn) return;
-
-  try {
-    setLoading(true);
-    const lgu = lguAnswers[0];
-    
-    // Clean the LGU name for Firebase path
-    const cleanLguName = lgu.lguName.replace(/[.#$\[\]]/g, '_');
-    
-    // Get the MLGO's UID from the forwarded assessment
-    const mlgoUid = forwardedAssessment.lguUid || lgu.lguUid;
-    
-    if (!mlgoUid) {
-      console.error("No MLGO UID found in:", { forwardedAssessment, lgu });
-      alert("MLGO information not found. Cannot return assessment.");
+  const handleReturnAssessment = async () => {
+    // Check both lguAnswers and forwardedAssessment
+    if (!lguAnswers.length || !forwardedAssessment) {
+      console.log("Missing data:", { 
+        lguAnswersLength: lguAnswers.length, 
+        forwardedAssessment: forwardedAssessment 
+      });
+      alert("No assessment data to return. Please make sure you're viewing a forwarded assessment.");
       return;
     }
+  
+    const confirmReturn = window.confirm(
+      "Are you sure you want to return this assessment to the MLGO? This will make it editable again for them."
+    );
     
-    console.log("Returning assessment to MLGO with UID:", mlgoUid);
-    
-    // 1. Update the original answers in the answers node
-    const answersRef = ref(db, `answers/${selectedYear}/LGU/${cleanLguName}`);
-    const snapshot = await get(answersRef);
-    
-    if (snapshot.exists()) {
-      const currentData = snapshot.val();
+    if (!confirmReturn) return;
+  
+    try {
+      setLoading(true);
+      const lgu = lguAnswers[0];
       
-      const updatedData = {
-        ...currentData,
-        _metadata: {
-          ...currentData._metadata,
-          submitted: false,
-          forwarded: false,
-          returnedToMLGO: true,
-          returnedAt: Date.now(),
-          returnedBy: auth.currentUser?.email,
-          remarks: remarks || "Assessment returned for revision"
-        }
-      };
+      // Clean the LGU name for Firebase path
+      const cleanLguName = lgu.lguName.replace(/[.#$\[\]]/g, '_');
       
-      await set(answersRef, updatedData);
-      console.log("✅ Updated answers node with return metadata");
+      // Get the MLGO's UID from the forwarded assessment
+      const mlgoUid = forwardedAssessment.lguUid || lgu.lguUid;
       
-      // 2. Remove from forwarded node
-      const forwardedRef = ref(db, `forwarded/${auth.currentUser.uid}`);
-      const forwardedSnapshot = await get(forwardedRef);
-      
-      if (forwardedSnapshot.exists()) {
-        const forwardedData = forwardedSnapshot.val();
-        
-        // Find and delete the specific forwarded record
-        for (const [key, item] of Object.entries(forwardedData)) {
-          if (item.lguUid === mlgoUid && item.year === selectedYear) {
-            await set(ref(db, `forwarded/${auth.currentUser.uid}/${key}`), null);
-            console.log("✅ Removed from forwarded node");
-            break;
-          }
-        }
+      if (!mlgoUid) {
+        console.error("No MLGO UID found in:", { forwardedAssessment, lgu });
+        alert("MLGO information not found. Cannot return assessment.");
+        return;
       }
       
-      // 3. Create a notification for the MLGO
-      const notificationRef = ref(db, `notifications/${selectedYear}/MLGO/${mlgoUid}`);
-      const notificationId = Date.now().toString();
-      const notificationData = {
-        id: notificationId,
-        type: "assessment_returned_from_po",
-        title: `Assessment (${selectedYear}) was returned by Provincial Office`,
-        message: remarks || "Please check the remarks and take appropriate action.",
-        from: auth.currentUser?.email,
-        fromName: profileData.name || auth.currentUser?.email,
-        timestamp: Date.now(),
-        read: false,
-        year: selectedYear,
-        lguName: lgu.lguName,
-        action: "view_returned_assessment"
-      };
+      console.log("Returning assessment to MLGO with UID:", mlgoUid);
       
-      await set(ref(db, `notifications/${selectedYear}/MLGO/${mlgoUid}/${notificationId}`), notificationData);
-      console.log("✅ Notification created for MLGO");
+      // 1. Update the original answers in the answers node
+      const answersRef = ref(db, `answers/${selectedYear}/LGU/${cleanLguName}`);
+      const snapshot = await get(answersRef);
       
-      alert("Assessment returned to MLGO successfully.");
-      setRemarks("");
-      
-      // Navigate back to dashboard
-      navigate("/dashboard");
-    } else {
-      alert("Could not find the original assessment data.");
+      if (snapshot.exists()) {
+        const currentData = snapshot.val();
+        
+        // Save ALL tab remarks from the PO
+        const updatedData = {
+          ...currentData,
+          _metadata: {
+            ...currentData._metadata,
+            submitted: false,
+            forwarded: false,
+            returnedToMLGO: true,
+            returnedAt: Date.now(),
+            returnedBy: auth.currentUser?.email,
+            returnedByName: profileData.name || auth.currentUser?.email,
+            poRemarks: remarks, // CHANGED: Save ALL tab remarks as an object
+            remarks: remarks[activeTab] || "Assessment returned for revision" // Keep single remark for backward compatibility
+          }
+        };
+        
+        await set(answersRef, updatedData);
+        console.log("✅ Updated answers node with return metadata and PO remarks:", remarks);
+        
+        // 2. Remove from forwarded node
+        const forwardedRef = ref(db, `forwarded/${auth.currentUser.uid}`);
+        const forwardedSnapshot = await get(forwardedRef);
+        
+        if (forwardedSnapshot.exists()) {
+          const forwardedData = forwardedSnapshot.val();
+          
+          // Find and delete the specific forwarded record
+          for (const [key, item] of Object.entries(forwardedData)) {
+            if (item.lguUid === mlgoUid && item.year === selectedYear) {
+              await set(ref(db, `forwarded/${auth.currentUser.uid}/${key}`), null);
+              console.log("✅ Removed from forwarded node");
+              break;
+            }
+          }
+        }
+        
+        // 3. Create a notification for the MLGO with ALL tab-specific remarks
+        const notificationRef = ref(db, `notifications/${selectedYear}/MLGO/${mlgoUid}`);
+        const notificationId = Date.now().toString();
+        const notificationData = {
+          id: notificationId,
+          type: "assessment_returned_from_po",
+          title: `Assessment (${selectedYear}) was returned by Provincial Office`,
+          message: `Assessment returned by PO. Please review the remarks for each tab.`,
+          from: auth.currentUser?.email,
+          fromName: profileData.name || auth.currentUser?.email,
+          timestamp: Date.now(),
+          read: false,
+          year: selectedYear,
+          lguName: lgu.lguName,
+          municipality: lgu.lguName,
+          poRemarks: remarks, // CHANGED: Include ALL tab remarks in notification
+          action: "view_returned_assessment"
+        };
+        
+        await set(ref(db, `notifications/${selectedYear}/MLGO/${mlgoUid}/${notificationId}`), notificationData);
+        console.log("✅ Notification created for MLGO with ALL tab remarks");
+        
+        alert("Assessment returned to MLGO successfully.");
+        setRemarks(prev => ({ ...prev, [activeTab]: "" })); // Clear current tab's remarks
+        
+        // Navigate back to dashboard
+        navigate("/dashboard");
+      } else {
+        alert("Could not find the original assessment data.");
+      }
+    } catch (error) {
+      console.error("Error returning assessment:", error);
+      alert("Failed to return assessment: " + error.message);
+    } finally {
+      setLoading(false);
     }
-  } catch (error) {
-    console.error("Error returning assessment:", error);
-    alert("Failed to return assessment: " + error.message);
-  } finally {
-    setLoading(false);
-  }
-};
+  };
 
 useEffect(() => {
   if (!auth.currentUser) return;
@@ -1263,6 +1341,51 @@ const getCurrentTabIndicators = () => {
   }
 };
 
+// Function to toggle flag for current tab
+const toggleFlag = () => {
+  const currentTabId = activeTab;
+  const isFlagged = !!verifiedFlag[currentTabId];
+  
+  if (isFlagged) {
+    // Remove flag
+    setVerifiedFlag(prev => {
+      const newFlags = { ...prev };
+      delete newFlags[currentTabId];
+      
+      // Update localStorage
+      localStorage.setItem('verifiedFlag', JSON.stringify(newFlags));
+      
+      return newFlags;
+    });
+    
+    alert(`${getTabName(currentTabId)} tab flag removed`);
+  } else {
+    // Add flag
+    const bookmarkData = {
+      lguName: lguAnswers[0]?.lguName || "",
+      year: selectedYear,
+      tabId: currentTabId,
+      tabName: getTabName(currentTabId),
+      timestamp: Date.now(),
+      remarks: remarks[currentTabId] || "Flagged as verified"
+    };
+    
+    setVerifiedFlag(prev => {
+      const newFlags = {
+        ...prev,
+        [currentTabId]: bookmarkData
+      };
+      
+      // Update localStorage
+      localStorage.setItem('verifiedFlag', JSON.stringify(newFlags));
+      
+      return newFlags;
+    });
+    
+    alert(`${getTabName(currentTabId)} tab flagged locally`);
+  }
+};
+
 return (
   <div className={style.dashboardScale}>
     <div className={style.dashboard}>
@@ -1708,8 +1831,12 @@ return (
                     <div key={record.firebaseKey} className="reference-wrapper">
                       
 {record.mainIndicators?.map((main, index) => {
-  const answerKey = getAnswerKey(record, index, main.title);
-  const answer = lgu.data?.[answerKey];
+  const radioKey = getAnswerKey(record, index, main.title, false, null, "radio");
+  const baseKey = getAnswerKey(record, index, main.title);
+  const answer =
+    main.fieldType === "multiple"
+      ? (lgu.data?.[radioKey] ?? lgu.data?.[baseKey])
+      : lgu.data?.[baseKey];
   
   return (
     <div key={index} className="reference-wrapper">
@@ -1729,11 +1856,13 @@ return (
                   <input 
                     type="radio" 
                     name={`${record.firebaseKey}_${index}_${main.title}`} // Unique name for this main indicator
-                    checked={answer?.value === choice}
+                    checked={isRadioSelected(answer?.value, choice, i)}
                     disabled 
                   /> 
                   <span>
-                    {choice}
+                    {choice && typeof choice === "object"
+                      ? (choice.label ?? choice.value ?? choice.name ?? choice.title ?? choice.text ?? "")
+                      : choice}
                   </span>
                 </div>
               ))}
@@ -1741,8 +1870,9 @@ return (
             {/* Checkbox - No need for unique name */}
             {main.fieldType === "checkbox" &&
               main.choices.map((choice, i) => {
-                const checkboxKey = getAnswerKey(record, index, `${main.title}_${i}`);
-                const checkboxAnswer = lgu.data?.[checkboxKey];
+                const checkboxKey = getAnswerKey(record, index, `${main.title}_${i}`, false, null, "checkbox");
+                const legacyCheckboxKey = getAnswerKey(record, index, `${main.title}_${i}`);
+                const checkboxAnswer = lgu.data?.[checkboxKey] ?? lgu.data?.[legacyCheckboxKey];
                 
                 return (
                   <div key={i}>
@@ -1752,7 +1882,9 @@ return (
                       disabled 
                     /> 
                     <span>
-                      {choice}
+                      {choice && typeof choice === "object"
+                        ? (choice.label ?? choice.value ?? choice.name ?? choice.title ?? choice.text ?? "")
+                        : choice}
                     </span>
                   </div>
                 );
@@ -1844,8 +1976,12 @@ return (
 })}
 
 {record.subIndicators?.map((sub, index) => {
-  const answerKey = getAnswerKey(record, index, sub.title, true);
-  const answer = lgu.data?.[answerKey];
+  const radioKey = getAnswerKey(record, index, sub.title, true, null, "radio");
+  const baseKey = getAnswerKey(record, index, sub.title, true);
+  const answer =
+    sub.fieldType === "multiple"
+      ? (lgu.data?.[radioKey] ?? lgu.data?.[baseKey])
+      : lgu.data?.[baseKey];
   
   return (
     <div key={index} className="reference-wrapper">
@@ -1864,11 +2000,13 @@ return (
                 <input 
                   type="radio" 
                   name={`${record.firebaseKey}_sub_${index}_${sub.title}`} // Unique name for this sub-indicator
-                  checked={answer?.value === choice}
+                  checked={isRadioSelected(answer?.value, choice, i)}
                   disabled 
                 /> 
                 <span>
-                  {choice}
+                  {choice && typeof choice === "object"
+                    ? (choice.label ?? choice.value ?? choice.name ?? choice.title ?? choice.text ?? "")
+                    : choice}
                 </span>
               </div>
             ))}
@@ -1876,8 +2014,9 @@ return (
           {/* Checkbox - No need for unique name */}
           {sub.fieldType === "checkbox" &&
             sub.choices.map((choice, i) => {
-              const checkboxKey = getAnswerKey(record, index, `${sub.title}_${i}`, true);
-              const checkboxAnswer = lgu.data?.[checkboxKey];
+              const checkboxKey = getAnswerKey(record, index, `${sub.title}_${i}`, true, null, "checkbox");
+              const legacyCheckboxKey = getAnswerKey(record, index, `${sub.title}_${i}`, true);
+              const checkboxAnswer = lgu.data?.[checkboxKey] ?? lgu.data?.[legacyCheckboxKey];
               
               return (
                 <div key={i}>
@@ -1887,11 +2026,13 @@ return (
                     disabled 
                   /> 
                   <span>
-                    {choice}
-                  </span>
-                </div>
-              );
-            })}
+                    {choice && typeof choice === "object"
+                      ? (choice.label ?? choice.value ?? choice.name ?? choice.title ?? choice.text ?? "")
+                      : choice}
+                    </span>
+                  </div>
+                );
+              })}
           
           {(sub.fieldType === "short" || sub.fieldType === "integer" || sub.fieldType === "date") && (
             <div>
@@ -1971,8 +2112,12 @@ return (
 {sub.nestedSubIndicators && sub.nestedSubIndicators.length > 0 && (
   <div className="nested-reference-wrapper" style={{ marginLeft: "30px", marginTop: "10px" }}>
     {sub.nestedSubIndicators.map((nested, nestedIndex) => {
-      const nestedAnswerKey = getAnswerKey(record, index, nested.title, true, nestedIndex);
-      const nestedAnswer = lgu.data?.[nestedAnswerKey];
+      const nestedRadioKey = getAnswerKey(record, index, nested.title, true, nestedIndex, "radio");
+      const baseNestedKey = getAnswerKey(record, index, nested.title, true, nestedIndex);
+      const nestedAnswer =
+        nested.fieldType === "multiple"
+          ? (lgu.data?.[nestedRadioKey] ?? lgu.data?.[baseNestedKey])
+          : lgu.data?.[baseNestedKey];
       
       return (
         <div key={nested.id || nestedIndex} className="nested-reference-item" style={{ marginBottom: "15px" }}>
@@ -1993,8 +2138,7 @@ return (
             }}>
               {/* Nested Multiple Choice - FIXED: Add unique name */}
               {nested.fieldType === "multiple" && nested.choices?.map((choice, i) => {
-                const nestedChoiceKey = getAnswerKey(record, index, nested.title, true, nestedIndex);
-                const isSelected = lgu.data?.[nestedChoiceKey]?.value === choice;
+                const isSelected = isRadioSelected(nestedAnswer?.value, choice, i);
                 
                 return (
                   <div key={i} style={{ marginBottom: "4px" }}>
@@ -2004,15 +2148,21 @@ return (
                       checked={isSelected}
                       disabled 
                     /> 
-                    <span style={{ marginLeft: "4px" }}>{choice}</span>
+                    <span style={{ marginLeft: "4px" }}>
+                      {choice && typeof choice === "object"
+                        ? (choice.label ?? choice.value ?? choice.name ?? choice.title ?? choice.text ?? "")
+                        : choice}
+                    </span>
                   </div>
                 );
               })}
 
               {/* Nested Checkbox */}
               {nested.fieldType === "checkbox" && nested.choices?.map((choice, i) => {
-                const nestedCheckboxKey = getAnswerKey(record, index, `${nested.title}_${i}`, true, nestedIndex);
-                const isChecked = lgu.data?.[nestedCheckboxKey]?.value === true;
+                const nestedCheckboxKey = getAnswerKey(record, index, `${nested.title}_${i}`, true, nestedIndex, "checkbox");
+                const legacyNestedCheckboxKey = getAnswerKey(record, index, `${nested.title}_${i}`, true, nestedIndex);
+                const isChecked =
+                  ((lgu.data?.[nestedCheckboxKey]?.value) ?? (lgu.data?.[legacyNestedCheckboxKey]?.value)) === true;
                 
                 return (
                   <div key={i} style={{ marginBottom: "4px" }}>
@@ -2021,7 +2171,11 @@ return (
                       checked={isChecked}
                       disabled 
                     /> 
-                    <span style={{ marginLeft: "4px" }}>{choice}</span>
+                    <span style={{ marginLeft: "4px" }}>
+                      {choice && typeof choice === "object"
+                        ? (choice.label ?? choice.value ?? choice.name ?? choice.title ?? choice.text ?? "")
+                        : choice}
+                    </span>
                   </div>
                 );
               })}
@@ -2167,7 +2321,7 @@ return (
           </div>
         )}
 
-        {/* Remarks and Flag Section */}
+        {/* Remarks and Flag Section - PER TAB */}
         <div style={{
           marginTop: "30px",
           padding: "20px",
@@ -2175,7 +2329,7 @@ return (
           borderRadius: "8px",
           border: "1px solid #e0e0e0"
         }}>
-          {/* Add Remarks for LGU */}
+          {/* Add Remarks for Current Tab */}
           <div style={{ marginBottom: "20px" }}>
             <h4 style={{ 
               margin: "0 0 10px 0", 
@@ -2183,13 +2337,16 @@ return (
               fontSize: "16px",
               fontWeight: "600"
             }}>
-              Add Remarks for MLGO:
+              Add Remarks for {getTabName(activeTab)} Tab:
             </h4>
             <textarea
               placeholder="Type here..."
               rows="4"
-              value={remarks}
-              onChange={(e) => setRemarks(e.target.value)}
+              value={remarks[activeTab] || ""} // CHANGED: use tab-specific remarks
+              onChange={(e) => setRemarks(prev => ({ 
+                ...prev, 
+                [activeTab]: e.target.value 
+              }))} // CHANGED: update tab-specific remarks
               style={{
                 width: "100%",
                 padding: "12px",
@@ -2202,7 +2359,7 @@ return (
             />
           </div>
 
-          {/* Flag as Verified Button */}
+          {/* Flag as Verified Button - PER TAB (TOGGLEABLE) */}
           <div style={{
             display: "flex",
             justifyContent: "flex-end",
@@ -2211,19 +2368,9 @@ return (
           }}>
             <div style={{ position: "relative", display: "inline-block" }}>
               <button
-                onClick={() => {
-                  const bookmarkData = {
-                    lguName: lguAnswers[0]?.lguName || "",
-                    year: selectedYear,
-                    timestamp: Date.now(),
-                    remarks: remarks || "Flagged as verified"
-                  };
-                  localStorage.setItem('verifiedFlag', JSON.stringify(bookmarkData));
-                  setVerifiedFlag(bookmarkData);
-                  alert("Page bookmarked locally as verified");
-                }}
+                onClick={toggleFlag}
                 style={{
-                  backgroundColor: "#28a745",
+                  backgroundColor: verifiedFlag[activeTab] ? "#dc3545" : "#28a745", // Red for remove, Green for add
                   color: "white",
                   border: "none",
                   padding: "10px 30px",
@@ -2233,11 +2380,26 @@ return (
                   fontWeight: "600",
                   display: "flex",
                   alignItems: "center",
-                  gap: "8px"
+                  gap: "8px",
+                  transition: "background-color 0.3s"
+                }}
+                onMouseOver={(e) => {
+                  if (verifiedFlag[activeTab]) {
+                    e.currentTarget.style.backgroundColor = "#c82333"; // Darker red on hover
+                  } else {
+                    e.currentTarget.style.backgroundColor = "#218838"; // Darker green on hover
+                  }
+                }}
+                onMouseOut={(e) => {
+                  if (verifiedFlag[activeTab]) {
+                    e.currentTarget.style.backgroundColor = "#dc3545"; // Back to red
+                  } else {
+                    e.currentTarget.style.backgroundColor = "#28a745"; // Back to green
+                  }
                 }}
               >
                 <span>⚐</span>
-                Flag as Verified
+                {verifiedFlag[activeTab] ? `Remove Flag from ${getTabName(activeTab)} Tab` : `Flag ${getTabName(activeTab)} Tab as Verified`}
               </button>
             </div>
           </div>

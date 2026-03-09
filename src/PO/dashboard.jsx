@@ -392,7 +392,10 @@ if (municipality === "Unknown") {
               lguUid: item.lguUid || "No UID",
               submittedBy: item.submittedBy || "Unknown",
               userRole: item.userRole || "Unknown",
-              originalData: item.originalData || {}
+              originalData: item.originalData || {},
+              // Needed so forwarded items don't collapse/hide in table logic
+              type: "forwarded",
+              lguName: item.lguName || municipality
             });
           });
           
@@ -698,14 +701,15 @@ const handleDeleteYear = async (yearToDelete) => {
 // ===== ADD THE VERIFIED FILTERING LOGIC HERE (ONLY CHANGE) =====
 // Combine forwardedData and verifiedData for display, removing verified items from forwarded
 const allData = useMemo(() => {
-  // Create a Set of verified item keys for quick lookup
+  // Use year+municipality as the unique identity per assessment.
+  // (Using year+lguUid is unreliable because lguUid is the MLGO UID and repeats.)
   const verifiedKeys = new Set(
-    verifiedData.map(v => `${v.year}-${v.lguUid}`)
+    verifiedData.map(v => `${v.year}-${v.municipality || v.lguName || "Unknown"}`)
   );
   
   // Filter out forwarded items that have been verified
   const filteredForwarded = forwardedData.filter(item => 
-    !verifiedKeys.has(`${item.year}-${item.lguUid}`)
+    !verifiedKeys.has(`${item.year}-${item.municipality || item.lguName || "Unknown"}`)
   );
   
   // Combine filtered forwarded with verified
@@ -722,8 +726,8 @@ const allData = useMemo(() => {
 // Remove duplicates based on lguUid and year and type
 const uniqueData = allData.filter((item, index, self) => 
   index === self.findIndex((t) => 
-    t.lguUid === item.lguUid && 
-    t.year === item.year && 
+    (t.municipality || t.lguName) === (item.municipality || item.lguName) &&
+    t.year === item.year &&
     t.type === item.type
   )
 );

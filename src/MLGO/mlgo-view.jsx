@@ -10,7 +10,7 @@ import { ref, push, onValue, set, get } from "firebase/database";
 
 export default function MLGOView() {
   const location = useLocation(); 
-  const [lguRemarks, setLguRemarks] = useState("");
+  const [lguRemarks, setLguRemarks] = useState({}); // CHANGED: object per tab
   const [isForwarded, setIsForwarded] = useState(false);
   const [isVerifiedView, setIsVerifiedView] = useState(location.state?.isVerified || false);
   const [municipalityMap, setMunicipalityMap] = useState({});
@@ -67,9 +67,27 @@ export default function MLGOView() {
     year: "",
     municipality: ""
   });
+
+// Helper function to get tab name
+const getTabName = (tabId) => {
+  switch(tabId) {
+    case 1: return 'Financial';
+    case 2: return 'Disaster';
+    case 3: return 'Social';
+    case 4: return 'Health';
+    case 5: return 'Education';
+    case 6: return 'Business';
+    case 7: return 'Safety';
+    case 8: return 'Environmental';
+    case 9: return 'Tourism';
+    case 10: return 'Youth';
+    default: return 'Financial';
+  }
+};
+
   // Helper function to get the correct answer key based on tab
 // Replace the complex getAnswerKey function with this updated version
-const getAnswerKey = (record, mainIndex, field, isSub = false, nestedIndex = null) => {
+const getAnswerKey = (record, mainIndex, field, isSub = false, nestedIndex = null, valueType = "default") => {
   const prefixMap = {
     1: 'financial_',    // Add underscore after each prefix
     2: 'disaster_',
@@ -86,12 +104,38 @@ const getAnswerKey = (record, mainIndex, field, isSub = false, nestedIndex = nul
   const prefix = prefixMap[activeTab] || '';
   
   if (nestedIndex !== null) {
+    if (valueType === "radio") return `${prefix}${record.firebaseKey}_sub_${mainIndex}_nested_${nestedIndex}_radio_${field}`;
+    if (valueType === "checkbox") return `${prefix}${record.firebaseKey}_sub_${mainIndex}_nested_${nestedIndex}_checkbox_${field}`;
     return `${prefix}${record.firebaseKey}_sub_${mainIndex}_nested_${nestedIndex}_${field}`;
   } else if (isSub) {
+    if (valueType === "radio") return `${prefix}${record.firebaseKey}_sub_${mainIndex}_radio_${field}`;
+    if (valueType === "checkbox") return `${prefix}${record.firebaseKey}_sub_${mainIndex}_checkbox_${field}`;
     return `${prefix}${record.firebaseKey}_sub_${mainIndex}_${field}`;
   } else {
+    if (valueType === "radio") return `${prefix}${record.firebaseKey}_${mainIndex}_radio_${field}`;
+    if (valueType === "checkbox") return `${prefix}${record.firebaseKey}_${mainIndex}_checkbox_${field}`;
     return `${prefix}${record.firebaseKey}_${mainIndex}_${field}`;
   }
+};
+
+// Radio answers are saved as index strings ("0","1","2"...). Keep fallback to legacy saved values.
+const isRadioSelected = (answerValue, choice, choiceIndex) => {
+  const saved = String(answerValue ?? "");
+  if (saved === String(choiceIndex)) return true;
+
+  const choiceLabel =
+    choice && typeof choice === "object"
+      ? (choice.label ?? choice.value ?? choice.name ?? choice.title ?? choice.text ?? "")
+      : choice;
+  const choiceValueRaw =
+    choice && typeof choice === "object"
+      ? (choice.value ?? choice.label ?? choice.name ?? choice.title ?? choice.text ?? "")
+      : choice;
+
+  if (choiceValueRaw !== "" && choiceValueRaw !== null && choiceValueRaw !== undefined && saved === String(choiceValueRaw)) return true;
+  if (choiceLabel !== "" && choiceLabel !== null && choiceLabel !== undefined && saved === String(choiceLabel)) return true;
+
+  return false;
 };
 
   useEffect(() => {
@@ -122,19 +166,82 @@ const getAnswerKey = (record, mainIndex, field, isSub = false, nestedIndex = nul
     status: "",
   });
 
-  const handleTabChange = (tabId, dbPath) => {
-    setActiveTab(tabId);
-    setCurrentDbPath(dbPath);
+  const [remarks, setRemarks] = useState({}); // CHANGED: object per tab
+  const [verifiedFlag, setVerifiedFlag] = useState({}); // CHANGED: object per tab
+
+// Add this for debugging
+console.log("🔥 MLGOView rendered with location.state:", JSON.stringify(location.state, null, 2));
+console.log("🔥 remarks state initial:", remarks);
+
+// Add this after your other useEffects to debug Firebase data
+useEffect(() => {
+  const debugFirebaseData = async () => {
+    if (!auth.currentUser || !location.state?.lguUid || !selectedYear) return;
+    
+    try {
+      const lguName = location.state.lguName || location.state.municipality;
+      const cleanLguName = lguName.replace(/[.#$\[\]]/g, '_');
+      
+      console.log("🔍 Debug: Checking Firebase for:", cleanLguName);
+      
+      const answersRef = ref(db, `answers/${selectedYear}/LGU/${cleanLguName}`);
+      const snapshot = await get(answersRef);
+      
+      if (snapshot.exists()) {
+        const data = snapshot.val();
+        console.log("🔍 Debug: Raw Firebase data:", JSON.stringify(data, null, 2));
+        
+        if (data._metadata) {
+          console.log("🔍 Debug: _metadata:", JSON.stringify(data._metadata, null, 2));
+          console.log("🔍 Debug: poRemarks exists?", !!data._metadata.poRemarks);
+          console.log("🔍 Debug: poRemarks type:", typeof data._metadata.poRemarks);
+          console.log("🔍 Debug: poRemarks value:", data._metadata.poRemarks);
+          
+          // If poRemarks exists, set it
+          if (data._metadata.poRemarks && typeof data._metadata.poRemarks === 'object') {
+            console.log("🔍 Debug: Setting remarks from poRemarks object");
+            setRemarks(data._metadata.poRemarks);
+          } else if (data._metadata.remarks) {
+            console.log("🔍 Debug: Setting remarks from single remarks field");
+            // If it's a string, convert to object with all tabs having same remark
+            if (typeof data._metadata.remarks === 'string') {
+              const singleRemark = data._metadata.remarks;
+              const remarksObj = {
+                1: singleRemark,
+                2: singleRemark,
+                3: singleRemark,
+                4: singleRemark,
+                5: singleRemark,
+                6: singleRemark,
+                7: singleRemark,
+                8: singleRemark,
+                9: singleRemark,
+                10: singleRemark
+              };
+              setRemarks(remarksObj);
+            }
+          }
+        }
+      } else {
+        console.log("🔍 Debug: No data found in Firebase");
+      }
+    } catch (error) {
+      console.error("🔍 Debug: Error fetching Firebase data:", error);
+    }
   };
   
-  const [remarks, setRemarks] = useState("");
-  const [verifiedFlag, setVerifiedFlag] = useState(null);
+  debugFirebaseData();
+}, [auth.currentUser, location.state, selectedYear]);
 
   // Load verified flag from localStorage on component mount
   useEffect(() => {
     const savedFlag = localStorage.getItem('verifiedFlag');
     if (savedFlag) {
-      setVerifiedFlag(JSON.parse(savedFlag));
+      try {
+        setVerifiedFlag(JSON.parse(savedFlag));
+      } catch (e) {
+        console.error("Error parsing saved flags:", e);
+      }
     }
   }, []);
 
@@ -370,6 +477,7 @@ const getAnswerKey = (record, mainIndex, field, isSub = false, nestedIndex = nul
     }
   };
 
+  
   // When loading assessment data
   useEffect(() => {
     if (lguAnswers.length > 0) {
@@ -402,124 +510,151 @@ const getAnswerKey = (record, mainIndex, field, isSub = false, nestedIndex = nul
   
   const [data, setData] = useState([]);
 
-  // Add this near the top of mlgo-view.jsx, after the useState declarations
-  useEffect(() => {
-    // Check if this is a returned assessment from the PO
-    if (location.state?.returned || location.state?.fromReturn) {
-      console.log("⚠️ This is a returned assessment from PO");
-      
-      // Set the remarks from location state
-      if (location.state?.remarks) {
-        setRemarks(location.state.remarks);
-        
-        // Show an alert to notify the user
-        setTimeout(() => {
-          alert("This assessment has been returned by the Provincial Office. Please review the remarks and take appropriate action.");
-        }, 500);
-      }
-      
-      // Optionally set a flag to show a banner
-      setIsReturned(true);
+// Add this near the top of mlgo-view.jsx, after the useState declarations
+useEffect(() => {
+  // Check if this is a returned assessment from the PO
+  if (location.state?.returned || location.state?.fromReturn || location.state?.lguData?._metadata?.returnedToMLGO) {
+    console.log("⚠️ This is a returned assessment from PO");
+    
+    // Get remarks from various possible locations
+    let poRemarks = {};
+    
+    // Try to get from location.state first
+    if (location.state?.poRemarks) {
+      poRemarks = location.state.poRemarks;
+    } 
+    // Then try from lguData metadata
+    else if (location.state?.lguData?._metadata?.poRemarks) {
+      poRemarks = location.state.lguData._metadata.poRemarks;
+    }
+    // Fallback to single remark
+    else if (location.state?.remarks) {
+      // If it's a single remark, apply it to all tabs or current tab?
+      const singleRemark = location.state.remarks;
+      poRemarks = { 1: singleRemark, 2: singleRemark, 3: singleRemark, 4: singleRemark, 5: singleRemark, 
+                    6: singleRemark, 7: singleRemark, 8: singleRemark, 9: singleRemark, 10: singleRemark };
     }
     
-    // Check if this assessment has been forwarded
-    if (location.state?.lguData?._metadata?.forwarded) {
-      setIsForwarded(true);
-    }
-  }, [location.state]);
-
-  const handleReturnToLGU = async () => {
-    if (!lguAnswers.length) {
-      alert("No assessment data to return");
-      return;
-    }
-
-    const confirmReturn = window.confirm(
-      "Are you sure you want to return this assessment to the LGU? This will make it editable again for them."
-    );
+    // Set the remarks state with all tab remarks
+    setRemarks(poRemarks);
     
-    if (!confirmReturn) return;
+    
+    // The assessment is now editable for MLGO
+    setIsForwarded(false);
+    setIsReturned(false); // Not returned to LGU yet, just to MLGO
+  }
+  
+  // Check if this assessment has been forwarded
+  if (location.state?.lguData?._metadata?.forwarded) {
+    setIsForwarded(true);
+  }
+}, [location.state]);
 
-    try {
-      setLoading(true);
-      const lgu = lguAnswers[0];
-      const cleanName = lgu.lguName.replace(/[.#$\[\]]/g, '_');
+const handleReturnToLGU = async () => {
+  if (!lguAnswers.length) {
+    alert("No assessment data to return");
+    return;
+  }
+
+  const confirmReturn = window.confirm(
+    "Are you sure you want to return this assessment to the LGU? This will make it editable again for them."
+  );
+  
+  if (!confirmReturn) return;
+
+  try {
+    setLoading(true);
+    const lgu = lguAnswers[0];
+    const cleanName = lgu.lguName.replace(/[.#$\[\]]/g, '_');
+    
+    // Update the answers to return to LGU
+    const answersRef = ref(db, `answers/${selectedYear}/LGU/${cleanName}`);
+    const snapshot = await get(answersRef);
+    
+    if (snapshot.exists()) {
+      const currentData = snapshot.val();
       
-      // Update the answers to return to LGU
-      const answersRef = ref(db, `answers/${selectedYear}/LGU/${cleanName}`);
-      const snapshot = await get(answersRef);
+      // Get the remark for current tab, ensure it's a string and not undefined
+      const currentTabRemark = lguRemarks[activeTab] || "";
+      const allRemarks = { ...lguRemarks }; // Save all tab remarks
       
-      if (snapshot.exists()) {
-        const currentData = snapshot.val();
+      // Create NEW metadata with MLGO remarks
+      const newMetadata = {
+        // Keep essential user info
+        uid: currentData._metadata?.uid,
+        email: currentData._metadata?.email,
+        name: currentData._metadata?.name,
+        lastSaved: currentData._metadata?.lastSaved,
+        year: currentData._metadata?.year,
         
-        // Create NEW metadata with ONLY return flags
-        const newMetadata = {
-          // Keep essential user info
-          uid: currentData._metadata?.uid,
-          email: currentData._metadata?.email,
-          name: currentData._metadata?.name,
-          lastSaved: currentData._metadata?.lastSaved,
-          year: currentData._metadata?.year,
-          
-          // Return flags ONLY
-          submitted: false,
-          returned: true,
-          returnedAt: Date.now(),
-          returnedBy: auth.currentUser?.email,
-          remarks: lguRemarks || "Assessment returned for revision",
-          canEdit: true
-          
-          // NO forwarding flags here
+        // Return flags with MLGO remarks
+        submitted: false,
+        returned: true,
+        returnedAt: Date.now(),
+        returnedBy: auth.currentUser?.email,
+        returnedByName: profileData.name || auth.currentUser?.email,
+        mlgoRemarks: allRemarks, // Save ALL tab remarks as an object
+        remarks: currentTabRemark || "Assessment returned for revision", // Single remark for backward compatibility
+        canEdit: true
+        
+        // NO forwarding flags here
+      };
+      
+      console.log("📤 Returning - New metadata with MLGO remarks:", newMetadata);
+      
+      const updatedData = {
+        ...currentData,
+        _metadata: newMetadata
+      };
+      
+      await set(answersRef, updatedData);
+      console.log("✅ Assessment returned to LGU successfully");
+      
+      const lguUid = currentData._metadata?.uid;
+      const municipality = lgu.municipality; // Get municipality from the LGU data
+
+      if (lguUid) {
+        console.log("Sending notification to LGU with UID:", lguUid, "Municipality:", municipality);
+        
+        const notificationRef = ref(db, `notifications/${selectedYear}/LGU/${lguUid}`);
+        const notificationId = Date.now().toString();
+        
+        // Ensure all values are defined (not undefined)
+        const notificationData = {
+          id: notificationId,
+          type: "assessment_returned",
+          title: `Assessment Form (${selectedYear}) was returned for revision.`,
+          message: currentTabRemark || "Please check the remarks and resubmit.",
+          from: auth.currentUser?.email || "",
+          fromName: profileData.name || auth.currentUser?.email || "",
+          timestamp: Date.now(),
+          read: false,
+          year: selectedYear,
+          municipality: municipality || "",
+          tabName: getTabName(activeTab) || "",
+          tabRemarks: currentTabRemark || "", // Ensure this is never undefined
+          allRemarks: allRemarks || {}, // Include all remarks for reference
+          action: "edit_assessment"
         };
         
-        console.log("📤 Returning - New metadata (NO forwarding fields):", newMetadata);
-        
-        const updatedData = {
-          ...currentData,
-          _metadata: newMetadata
-        };
-        
-        await set(answersRef, updatedData);
-        console.log("✅ Assessment returned to LGU successfully");
-        
-        const lguUid = currentData._metadata?.uid;
-        const municipality = lgu.municipality; // Get municipality from the LGU data
-
-        if (lguUid) {
-          console.log("Sending notification to LGU with UID:", lguUid, "Municipality:", municipality);
-          
-          const notificationRef = ref(db, `notifications/${selectedYear}/LGU/${lguUid}`);
-          const notificationId = Date.now().toString();
-          const notificationData = {
-            id: notificationId,
-            type: "assessment_returned",
-            title: `Assessment Form (${selectedYear}) was returned for revision.`,
-            message: lguRemarks || "Please check the remarks and resubmit.",
-            from: auth.currentUser?.email,
-            fromName: profileData.name || auth.currentUser?.email,
-            timestamp: Date.now(),
-            read: false,
-            year: selectedYear,
-            municipality: municipality, // Add municipality for filtering
-            action: "edit_assessment"
-          };
-          
-          await set(ref(db, `notifications/${selectedYear}/LGU/${lguUid}/${notificationId}`), notificationData);
-          console.log("✅ Notification saved to:", `notifications/${selectedYear}/LGU/${lguUid}/${notificationId}`);
-        } else {
-          console.error("No LGU UID found for notification");
-        }
-        
-        // Navigate back to dashboard
-        navigate("/mlgo-dashboard");
+        await set(ref(db, `notifications/${selectedYear}/LGU/${lguUid}/${notificationId}`), notificationData);
+        console.log("✅ Notification saved to:", `notifications/${selectedYear}/LGU/${lguUid}/${notificationId}`);
+      } else {
+        console.error("No LGU UID found for notification");
       }
-    } catch (error) {
-      console.error("Error returning to LGU:", error);
-      alert("Failed to return assessment: " + error.message);
-    } finally {
-      setLoading(false);
+      
+      alert("Assessment returned to LGU successfully!");
+      
+      // Navigate back to dashboard
+      navigate("/mlgo-dashboard");
     }
-  };
+  } catch (error) {
+    console.error("Error returning to LGU:", error);
+    alert("Failed to return assessment: " + error.message);
+  } finally {
+    setLoading(false);
+  }
+};
 
   useEffect(() => {
     if (!auth.currentUser) return;
@@ -890,17 +1025,12 @@ if (location.state?.isVerified) {
     if (location.state?.returnedFromPO || location.state?.lguData?._metadata?.returnedToMLGO) {
       console.log("⚠️ This assessment was returned by PO");
       
-      // Set the remarks from location state or metadata
+      // Set the remarks from location state or metadata - now per tab
       const poRemarks = location.state?.remarks || 
                         location.state?.lguData?._metadata?.remarks || 
                         "Assessment returned by Provincial Office";
       
       setRemarks(poRemarks);
-      
-      // Show an alert to notify the user
-      setTimeout(() => {
-        alert("This assessment has been returned by the Provincial Office. Please review the remarks and take appropriate action.");
-      }, 500);
       
       // The assessment is now editable for MLGO
       setIsForwarded(false);
@@ -1183,6 +1313,11 @@ if (location.state?.isVerified) {
     }
   };
 
+  const handleTabChange = (tabId, dbPath) => {
+    setActiveTab(tabId);
+    setCurrentDbPath(dbPath);
+  };
+
   // Get current tab indicators
   const getCurrentTabIndicators = () => {
     switch(activeTab) {
@@ -1197,6 +1332,51 @@ if (location.state?.isVerified) {
       case 9: return tourismIndicators;
       case 10: return youthIndicators;
       default: return indicators;
+    }
+  };
+
+  // Function to toggle flag for current tab
+  const toggleFlag = () => {
+    const currentTabId = activeTab;
+    const isFlagged = !!verifiedFlag[currentTabId];
+    
+    if (isFlagged) {
+      // Remove flag
+      setVerifiedFlag(prev => {
+        const newFlags = { ...prev };
+        delete newFlags[currentTabId];
+        
+        // Update localStorage
+        localStorage.setItem('verifiedFlag', JSON.stringify(newFlags));
+        
+        return newFlags;
+      });
+      
+      alert(`${getTabName(currentTabId)} tab flag removed`);
+    } else {
+      // Add flag
+      const bookmarkData = {
+        lguName: lguAnswers[0]?.lguName || "",
+        year: selectedYear,
+        tabId: currentTabId,
+        tabName: getTabName(currentTabId),
+        timestamp: Date.now(),
+        remarks: lguRemarks[currentTabId] || "Flagged as verified"
+      };
+      
+      setVerifiedFlag(prev => {
+        const newFlags = {
+          ...prev,
+          [currentTabId]: bookmarkData
+        };
+        
+        // Update localStorage
+        localStorage.setItem('verifiedFlag', JSON.stringify(newFlags));
+        
+        return newFlags;
+      });
+      
+      alert(`${getTabName(currentTabId)} tab flagged locally`);
     }
   };
 
@@ -1564,8 +1744,12 @@ if (location.state?.isVerified) {
                 
                 {/* Main Indicators */}
                 {record.mainIndicators?.map((main, index) => {
-                  const answerKey = getAnswerKey(record, index, main.title);
-                  const answer = lgu.data?.[answerKey];
+                  const radioKey = getAnswerKey(record, index, main.title, false, null, "radio");
+                  const baseKey = getAnswerKey(record, index, main.title);
+                  const answer =
+                    main.fieldType === "multiple"
+                      ? (lgu.data?.[radioKey] ?? lgu.data?.[baseKey])
+                      : lgu.data?.[baseKey];
                   
                   return (
                     <div key={index} className="reference-wrapper">
@@ -1584,11 +1768,13 @@ if (location.state?.isVerified) {
       <input 
         type="radio" 
         name={`${record.firebaseKey}_${index}_${main.title}`} // Make name unique
-        checked={answer?.value === choice}
+        checked={isRadioSelected(answer?.value, choice, i)}
         disabled 
       /> 
       <span>
-        {choice}
+        {choice && typeof choice === "object"
+          ? (choice.label ?? choice.value ?? choice.name ?? choice.title ?? choice.text ?? "")
+          : choice}
       </span>
     </div>
   ))
@@ -1596,8 +1782,9 @@ if (location.state?.isVerified) {
                             
 {main.fieldType === "checkbox" &&
   main.choices.map((choice, i) => {
-    const checkboxKey = getAnswerKey(record, index, `${main.title}_${i}`);
-    const checkboxAnswer = lgu.data?.[checkboxKey];
+    const checkboxKey = getAnswerKey(record, index, `${main.title}_${i}`, false, null, "checkbox");
+    const legacyCheckboxKey = getAnswerKey(record, index, `${main.title}_${i}`);
+    const checkboxAnswer = lgu.data?.[checkboxKey] ?? lgu.data?.[legacyCheckboxKey];
     
     return (
       <div key={i}>
@@ -1607,7 +1794,9 @@ if (location.state?.isVerified) {
           disabled 
         /> 
         <span>
-          {choice}
+          {choice && typeof choice === "object"
+            ? (choice.label ?? choice.value ?? choice.name ?? choice.title ?? choice.text ?? "")
+            : choice}
         </span>
       </div>
     );
@@ -1700,8 +1889,12 @@ if (location.state?.isVerified) {
 })}
 
 {record.subIndicators?.map((sub, index) => {
-  const answerKey = getAnswerKey(record, index, sub.title, true);
-  const answer = lgu.data?.[answerKey];
+  const radioKey = getAnswerKey(record, index, sub.title, true, null, "radio");
+  const baseKey = getAnswerKey(record, index, sub.title, true);
+  const answer =
+    sub.fieldType === "multiple"
+      ? (lgu.data?.[radioKey] ?? lgu.data?.[baseKey])
+      : lgu.data?.[baseKey];
   
   return (
     <div key={index} className="reference-wrapper">
@@ -1720,11 +1913,13 @@ if (location.state?.isVerified) {
                 <input 
                   type="radio" 
                   name={`${record.firebaseKey}_sub_${index}_${sub.title}`} // Fixed: use _sub_ format
-                  checked={answer?.value === choice}
+                  checked={isRadioSelected(answer?.value, choice, i)}
                   disabled 
                 /> 
                 <span>
-                  {choice}
+                  {choice && typeof choice === "object"
+                    ? (choice.label ?? choice.value ?? choice.name ?? choice.title ?? choice.text ?? "")
+                    : choice}
                 </span>
               </div>
             ))
@@ -1733,8 +1928,9 @@ if (location.state?.isVerified) {
           {/* Checkbox */}
           {sub.fieldType === "checkbox" &&
             sub.choices.map((choice, i) => {
-              const checkboxKey = getAnswerKey(record, index, `${sub.title}_${i}`, true);
-              const checkboxAnswer = lgu.data?.[checkboxKey];
+              const checkboxKey = getAnswerKey(record, index, `${sub.title}_${i}`, true, null, "checkbox");
+              const legacyCheckboxKey = getAnswerKey(record, index, `${sub.title}_${i}`, true);
+              const checkboxAnswer = lgu.data?.[checkboxKey] ?? lgu.data?.[legacyCheckboxKey];
               
               return (
                 <div key={i}>
@@ -1744,7 +1940,9 @@ if (location.state?.isVerified) {
                     disabled 
                   /> 
                   <span>
-                    {choice}
+                    {choice && typeof choice === "object"
+                      ? (choice.label ?? choice.value ?? choice.name ?? choice.title ?? choice.text ?? "")
+                      : choice}
                   </span>
                 </div>
               );
@@ -1829,8 +2027,12 @@ if (location.state?.isVerified) {
       {sub.nestedSubIndicators && sub.nestedSubIndicators.length > 0 && (
         <div className="nested-reference-wrapper">
           {sub.nestedSubIndicators.map((nested, nestedIndex) => {
-            const nestedAnswerKey = getAnswerKey(record, index, nested.title, true, nestedIndex);
-            const nestedAnswer = lgu.data?.[nestedAnswerKey];
+            const nestedRadioKey = getAnswerKey(record, index, nested.title, true, nestedIndex, "radio");
+            const baseNestedKey = getAnswerKey(record, index, nested.title, true, nestedIndex);
+            const nestedAnswer =
+              nested.fieldType === "multiple"
+                ? (lgu.data?.[nestedRadioKey] ?? lgu.data?.[baseNestedKey])
+                : lgu.data?.[baseNestedKey];
             
             // Also check with prefix if needed
             const prefixMap = {
@@ -1846,7 +2048,7 @@ if (location.state?.isVerified) {
               10: 'youth_'
             };
             const prefix = prefixMap[activeTab] || '';
-            const prefixedNestedAnswer = lgu.data?.[`${prefix}${nestedAnswerKey}`];
+            const prefixedNestedAnswer = lgu.data?.[`${prefix}${baseNestedKey}`];
             
             const finalNestedAnswer = nestedAnswer || prefixedNestedAnswer;
             
@@ -1864,19 +2066,22 @@ if (location.state?.isVerified) {
                         <input 
                           type="radio" 
                           name={`${record.firebaseKey}_sub_${index}_nested_${nestedIndex}_${nested.title}`} // Already correct
-                          checked={finalNestedAnswer?.value === choice}
+                          checked={isRadioSelected(finalNestedAnswer?.value, choice, i)}
                           disabled 
                         /> 
                         <span>
-                          {choice}
+                          {choice && typeof choice === "object"
+                            ? (choice.label ?? choice.value ?? choice.name ?? choice.title ?? choice.text ?? "")
+                            : choice}
                         </span>
                       </div>
                     ))}
 
                     {/* Checkbox */}
                     {nested.fieldType === "checkbox" && nested.choices?.map((choice, i) => {
-                      const nestedCheckboxKey = getAnswerKey(record, index, `${nested.title}_${i}`, true, nestedIndex);
-                      const nestedCheckboxAnswer = lgu.data?.[nestedCheckboxKey];
+                      const nestedCheckboxKey = getAnswerKey(record, index, `${nested.title}_${i}`, true, nestedIndex, "checkbox");
+                      const legacyNestedCheckboxKey = getAnswerKey(record, index, `${nested.title}_${i}`, true, nestedIndex);
+                      const nestedCheckboxAnswer = lgu.data?.[nestedCheckboxKey] ?? lgu.data?.[legacyNestedCheckboxKey];
                       
                       return (
                         <div key={i}>
@@ -1886,7 +2091,9 @@ if (location.state?.isVerified) {
                             disabled 
                           /> 
                           <span>
-                            {choice}
+                            {choice && typeof choice === "object"
+                              ? (choice.label ?? choice.value ?? choice.name ?? choice.title ?? choice.text ?? "")
+                              : choice}
                           </span>
                         </div>
                       );
@@ -2001,334 +2208,302 @@ if (location.state?.isVerified) {
                       </div>
                     )}
 
-                    {/* Remarks and Flag Section - INSIDE scrollableContent */}
-                    <div style={{
-                      marginTop: "30px",
-                      padding: "20px",
-                      backgroundColor: "#f9f9f9",
-                      borderRadius: "8px",
-                      border: "1px solid #e0e0e0"
-                    }}>
-                      <div style={{ marginBottom: "20px" }}>
-                        <h4 style={{ 
-                          margin: "0 0 10px 0", 
-                          color: "#333", 
-                          fontSize: "16px",
-                          fontWeight: "600"
-                        }}>
-                          {location.state?.isVerified ? "Verification Details" : "Remarks from Provincial Office:"}
-                        </h4>
-                        <div style={{
-                          backgroundColor: location.state?.isVerified ? "#d4edda" : "#fff3cd",
-                          border: location.state?.isVerified ? "1px solid #c3e6cb" : "1px solid #ffeeba",
-                          borderRadius: "8px",
-                          padding: "15px",
-                          color: location.state?.isVerified ? "#155724" : "#856404",
-                          fontSize: "14px",
-                          minHeight: "60px"
-                        }}>
-                          {location.state?.isVerified ? (
-                            <>
-                              <div><strong>Verified by:</strong> {location.state.verifiedBy}</div>
-                              <div><strong>Verified at:</strong> {new Date(location.state.verifiedAt).toLocaleString()}</div>
-                              {location.state.remarks && <div><strong>Remarks:</strong> {location.state.remarks}</div>}
-                            </>
-                          ) : (
-                            location.state?.remarks || 
-                            location.state?.lguData?._metadata?.remarks || 
-                            "No remarks from PO"
-                          )}
-                        </div>
-                      </div>
+{/* Remarks from PO Section */}
+<div style={{
+  marginTop: "30px",
+  padding: "20px",
+  backgroundColor: "#f9f9f9",
+  borderRadius: "8px",
+  border: "1px solid #e0e0e0"
+}}>
+  <div style={{ marginBottom: "20px" }}>
+    <h4 style={{ 
+      margin: "0 0 10px 0", 
+      color: "#333", 
+      fontSize: "16px",
+      fontWeight: "600"
+    }}>
+      Remarks from PO for {getTabName(activeTab)} Tab:
+    </h4>
+    
+    {/* Display the remark for current tab */}
+    <div style={{
+      backgroundColor: "#fff3cd",
+      border: "1px solid #ffeeba",
+      borderRadius: "8px",
+      padding: "15px",
+      color: "#856404",
+      fontSize: "14px",
+      minHeight: "60px",
+      whiteSpace: "pre-wrap",
+      wordBreak: "break-word"
+    }}>
+      {remarks && typeof remarks === 'object' && remarks[activeTab] ? (
+        <div>
+          <strong>Remark:</strong> {remarks[activeTab]}
+        </div>
+      ) : remarks && typeof remarks === 'string' ? (
+        <div>
+          <strong>Remark:</strong> {remarks}
+        </div>
+      ) : (
+        <div style={{ fontStyle: "italic", color: "#999" }}>
+          No remark from PO for this tab
+        </div>
+      )}
+    </div>
+  </div>
 
-                      {/* Add Remarks for LGU - Only show if not verified */}
-                      {!location.state?.isVerified && (
-                        <div style={{ marginBottom: "20px" }}>
-                          <h4 style={{ 
-                            margin: "0 0 10px 0", 
-                            color: "#333", 
-                            fontSize: "16px",
-                            fontWeight: "600"
-                          }}>
-                            Add Remarks for LGU:
-                          </h4>
-                          <textarea
-                            placeholder="Type your remarks for the LGU here..."
-                            rows="4"
-                            value={lguRemarks}
-                            onChange={(e) => setLguRemarks(e.target.value)}
-                            style={{
-                              width: "100%",
-                              padding: "12px",
-                              border: "1px solid #ccc",
-                              borderRadius: "8px",
-                              fontSize: "14px",
-                              resize: "vertical",
-                              fontFamily: "inherit"
-                            }}
-                          />
-                        </div>
-                      )}
+  {/* Add Remarks for LGU - only show if not verified */}
+  {!location.state?.isVerified && (
+    <div style={{ marginBottom: "20px" }}>
+      <h4 style={{ 
+        margin: "0 0 10px 0", 
+        color: "#333", 
+        fontSize: "16px",
+        fontWeight: "600"
+      }}>
+        Add Remarks for LGU ({getTabName(activeTab)} Tab):
+      </h4>
+      <textarea
+        placeholder="Type your remarks for the LGU here..."
+        rows="4"
+        value={lguRemarks[activeTab] || ""}
+        onChange={(e) => setLguRemarks(prev => ({ 
+          ...prev, 
+          [activeTab]: e.target.value 
+        }))}
+        style={{
+          width: "100%",
+          padding: "12px",
+          border: "1px solid #ccc",
+          borderRadius: "8px",
+          fontSize: "14px",
+          resize: "vertical",
+          fontFamily: "inherit"
+        }}
+      />
+    </div>
+  )}
 
-                      {/* Flag as Verified Button */}
-                      <div style={{
-                        display: "flex",
-                        justifyContent: "flex-end",
-                        alignItems: "center",
-                        gap: "15px"
-                      }}>
-                        {verifiedFlag && verifiedFlag.lguName === lguAnswers[0]?.lguName && verifiedFlag.year === selectedYear ? (
-                          <button
-                            onClick={() => {
-                              // Remove from localStorage
-                              localStorage.removeItem('verifiedFlag');
-                              setVerifiedFlag(null);
-                              alert("Flag removed from this assessment");
-                            }}
-                            style={{
-                              backgroundColor: "#dc3545",
-                              color: "white",
-                              border: "none",
-                              padding: "10px 30px",
-                              borderRadius: "5px",
-                              fontSize: "14px",
-                              cursor: "pointer",
-                              fontWeight: "600",
-                              display: "flex",
-                              alignItems: "center",
-                              gap: "8px",
-                              transition: "background-color 0.2s"
-                            }}
-                            onMouseOver={(e) => e.currentTarget.style.backgroundColor = "#c82333"}
-                            onMouseOut={(e) => e.currentTarget.style.backgroundColor = "#dc3545"}
-                          >
-                            <span>⚐</span>
-                            Remove Flag
-                          </button>
-                        ) : (
-                          <div style={{ position: "relative", display: "inline-block" }}>
-                            <button
-                              onClick={() => {
-                                const bookmarkData = {
-                                  lguName: lguAnswers[0]?.lguName || "",
-                                  year: selectedYear,
-                                  timestamp: Date.now(),
-                                  remarks: remarks || "Flagged as verified"
-                                };
-                                localStorage.setItem('verifiedFlag', JSON.stringify(bookmarkData));
-                                setVerifiedFlag(bookmarkData);
-                                alert("Page bookmarked locally as verified");
-                              }}
-                              onMouseEnter={(e) => {
-                                const tooltip = e.currentTarget.parentElement.querySelector('.flag-tooltip');
-                                if (tooltip) tooltip.style.display = 'block';
-                              }}
-                              onMouseLeave={(e) => {
-                                const tooltip = e.currentTarget.parentElement.querySelector('.flag-tooltip');
-                                if (tooltip) tooltip.style.display = 'none';
-                              }}
-                              style={{
-                                backgroundColor: "#28a745",
-                                color: "white",
-                                border: "none",
-                                padding: "10px 30px",
-                                borderRadius: "5px",
-                                fontSize: "14px",
-                                cursor: "pointer",
-                                fontWeight: "600",
-                                display: "flex",
-                                alignItems: "center",
-                                gap: "8px",
-                                transition: "background-color 0.2s"
-                              }}
-                              onMouseOver={(e) => e.currentTarget.style.backgroundColor = "#006735d0"}
-                              onMouseOut={(e) => e.currentTarget.style.backgroundColor = "#28a745"}
-                            >
-                              <span>⚐</span>
-                              Flag as Verified
-                            </button>
-                            
-                            {/* Tooltip */}
-                            <div 
-                              className="flag-tooltip"
-                              style={{
-                                position: "absolute",
-                                bottom: "100%",
-                                left: "0",
-                                marginBottom: "5px",
-                                backgroundColor: "#2d2d2d",
-                                color: "#e0e0e0",
-                                padding: "8px 12px",
-                                borderRadius: "4px",
-                                fontSize: "12px",
-                                whiteSpace: "normal",
-                                display: "none",
-                                zIndex: 1000,
-                                boxShadow: "0 2px 4px rgba(0,0,0,0.3)",
-                                pointerEvents: "none",
-                                width: "200px",
-                                fontFamily: "Arial, sans-serif",
-                                border: "1px solid #444"
-                              }}
-                            >
-                              <div style={{ 
-                                display: "flex", 
-                                flexDirection: "column", 
-                                gap: "2px",
-                                lineHeight: "1.4"
-                              }}>
-                                <span style={{ color: "#aaa", fontSize: "11px" }}>Mark as verified to track reviewed sections.</span>
-                              </div>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </>
-                ) : null}
-              </div>
-            </div>
+  {/* Flag as Verified Button with Tooltip */}
+  <div style={{
+    display: "flex",
+    justifyContent: "flex-end",
+    alignItems: "center",
+    gap: "15px"
+  }}>
+    <div style={{ position: "relative", display: "inline-block" }}>
+      <button
+        onClick={toggleFlag}
+        style={{
+          backgroundColor: verifiedFlag[activeTab] ? "#dc3545" : "#28a745",
+          color: "white",
+          border: "none",
+          padding: "10px 30px",
+          borderRadius: "5px",
+          fontSize: "14px",
+          cursor: "pointer",
+          fontWeight: "600",
+          display: "flex",
+          alignItems: "center",
+          gap: "8px"
+        }}
+        onMouseOver={(e) => {
+          const tooltip = e.currentTarget.parentElement.querySelector('.flag-tooltip');
+          if (tooltip) tooltip.style.display = 'block';
+        }}
+        onMouseOut={(e) => {
+          const tooltip = e.currentTarget.parentElement.querySelector('.flag-tooltip');
+          if (tooltip) tooltip.style.display = 'none';
+        }}
+      >
+        <span>⚐</span>
+        {verifiedFlag[activeTab] ? `Remove Flag from ${getTabName(activeTab)} Tab` : `Flag ${getTabName(activeTab)} Tab as Verified`}
+      </button>
+      
+      {/* Tooltip */}
+      <div 
+        className="flag-tooltip"
+        style={{
+          position: "absolute",
+          bottom: "100%",
+          left: "0",
+          marginBottom: "5px",
+          backgroundColor: "#2d2d2d",
+          color: "#e0e0e0",
+          padding: "8px 12px",
+          borderRadius: "4px",
+          fontSize: "12px",
+          whiteSpace: "normal",
+          display: "none",
+          zIndex: 1000,
+          boxShadow: "0 2px 4px rgba(0,0,0,0.3)",
+          pointerEvents: "none",
+          width: "200px",
+          fontFamily: "Arial, sans-serif",
+          border: "1px solid #444"
+        }}
+      >
+        <div style={{ 
+          display: "flex", 
+          flexDirection: "column", 
+          gap: "2px",
+          lineHeight: "1.4"
+        }}>
+          <span style={{ color: "#aaa", fontSize: "11px" }}>Mark as verified to track reviewed sections.</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+{/* Close the main conditional rendering */}
+</>
+) : null}
+</div>
+</div>
+</div>
+
+{/* Modals */}
+{showProfileModal && (
+  <div className="modal-overlay">
+    <div className="profile-view-modal">
+      <div className="profile-view-header">
+        <span className="back-btn" onClick={() => setShowProfileModal(false)}>←</span>
+        <h3>Profile</h3>
+      </div>
+      <div className="profile-view-body">
+        <div className="profile-view-avatar">
+          {profileData.image ? (
+            <img src={profileData.image} alt="Profile" />
+          ) : (
+            <div className="avatar-placeholder">👤</div>
+          )}
+        </div>
+        <h2>{profileData.name || "No Name"}</h2>
+        <p className="profile-email">{profileData.email}</p>
+        <div className="profile-action-buttons">
+          <button
+            className="profile-btn"
+            onClick={() => {
+              setShowProfileModal(false);
+              setShowEditProfileModal(true);
+            }}
+          >
+            Edit Profile
+          </button>
+          <button
+            className="profile-btn signout"
+            onClick={handleSignOut}
+          >
+            Sign Out
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+)}
+
+{showEditProfileModal && (
+  <div className="modal-overlay">
+    <div className="add-record-modal profile-modal">
+      <div className="modal-header">
+        <h3>Edit Profile</h3>
+        <span
+          className="close-x"
+          onClick={profileComplete ? () => {
+            setEditProfileData(profileData);
+            setShowEditProfileModal(false);
+          } : undefined}
+          style={{
+            cursor: profileComplete ? "pointer" : "not-allowed",
+            opacity: profileComplete ? 1 : 0.5,
+            pointerEvents: profileComplete ? "auto" : "none"
+          }}
+          title={!profileComplete ? "Please complete your profile first" : "Close"}
+        >
+          ✕
+        </span>
+      </div>
+      <div className="modal-body">
+        <div className="modal-field">
+          <label>Profile Image:</label>
+          <input type="file" accept="image/*" onChange={handleImageUpload} />
+        </div>
+        {editProfileData.image && (
+          <div className="profile-preview">
+            <img src={editProfileData.image} alt="Preview" />
+            <button
+              type="button"
+              className="remove-photo-btn"
+              onClick={() =>
+                setEditProfileData({ ...editProfileData, image: "" })
+              }
+            >
+              Remove
+            </button>
           </div>
-
-          {/* Modals */}
-          {showProfileModal && (
-            <div className="modal-overlay">
-              <div className="profile-view-modal">
-                <div className="profile-view-header">
-                  <span className="back-btn" onClick={() => setShowProfileModal(false)}>←</span>
-                  <h3>Profile</h3>
-                </div>
-                <div className="profile-view-body">
-                  <div className="profile-view-avatar">
-                    {profileData.image ? (
-                      <img src={profileData.image} alt="Profile" />
-                    ) : (
-                      <div className="avatar-placeholder">👤</div>
-                    )}
-                  </div>
-                  <h2>{profileData.name || "No Name"}</h2>
-                  <p className="profile-email">{profileData.email}</p>
-                  <div className="profile-action-buttons">
-                    <button
-                      className="profile-btn"
-                      onClick={() => {
-                        setShowProfileModal(false);
-                        setShowEditProfileModal(true);
-                      }}
-                    >
-                      Edit Profile
-                    </button>
-                    <button
-                      className="profile-btn signout"
-                      onClick={handleSignOut}
-                    >
-                      Sign Out
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {showEditProfileModal && (
-            <div className="modal-overlay">
-              <div className="add-record-modal profile-modal">
-                <div className="modal-header">
-                  <h3>Edit Profile</h3>
-                  <span
-                    className="close-x"
-                    onClick={profileComplete ? () => {
-                      setEditProfileData(profileData);
-                      setShowEditProfileModal(false);
-                    } : undefined}
-                    style={{
-                      cursor: profileComplete ? "pointer" : "not-allowed",
-                      opacity: profileComplete ? 1 : 0.5,
-                      pointerEvents: profileComplete ? "auto" : "none"
-                    }}
-                    title={!profileComplete ? "Please complete your profile first" : "Close"}
-                  >
-                    ✕
-                  </span>
-                </div>
-                <div className="modal-body">
-                  <div className="modal-field">
-                    <label>Profile Image:</label>
-                    <input type="file" accept="image/*" onChange={handleImageUpload} />
-                  </div>
-                  {editProfileData.image && (
-                    <div className="profile-preview">
-                      <img src={editProfileData.image} alt="Preview" />
-                      <button
-                        type="button"
-                        className="remove-photo-btn"
-                        onClick={() =>
-                          setEditProfileData({ ...editProfileData, image: "" })
-                        }
-                      >
-                        Remove
-                      </button>
-                    </div>
-                  )}
-                  <div className="modal-field">
-                    <label>Name:</label>
-                    <input
-                      type="text"
-                      value={editProfileData.name}
-                      onChange={(e) =>
-                        setEditProfileData({ ...editProfileData, name: e.target.value })
-                      }
-                    />
-                  </div>
-                  <div className="modal-field">
-                    <label>Municipality:</label>
-                    <select
-                      value={editProfileData.municipality}
-                      onChange={(e) =>
-                        setEditProfileData({ ...editProfileData, municipality: e.target.value })
-                      }
-                      disabled={profileComplete}
-                      style={{ 
-                        width: "100%", 
-                        padding: "8px", 
-                        borderRadius: "4px", 
-                        border: "1px solid #ccc",
-                        backgroundColor: profileComplete ? "#f5f5f5" : "white",
-                        cursor: profileComplete ? "not-allowed" : "pointer",
-                        opacity: profileComplete ? 0.7 : 1
-                      }}
-                      title={profileComplete ? "Municipality cannot be changed after initial setup" : "Select your municipality"}
-                    >
-                      <option value="">Select Municipality</option>
-                      {municipalities.map((municipality) => (
-                        <option key={municipality} value={municipality}>
-                          {municipality}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="modal-field">
-                    <label>Email:</label>
-                    <input
-                      type="text"
-                      value={auth.currentUser?.email || ""}
-                      disabled
-                      style={{ background: "#f1f1f1", cursor: "not-allowed" }}
-                    />
-                  </div>
-                  <div className="modal-footer">
-                    <button
-                      className="save-profile-btn"
-                      onClick={handleSaveProfile}
-                      disabled={savingProfile || !editProfileData.name.trim() || !editProfileData.municipality.trim()}
-                    >
-                      {savingProfile ? "Saving..." : "Save Changes"}
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
+        )}
+        <div className="modal-field">
+          <label>Name:</label>
+          <input
+            type="text"
+            value={editProfileData.name}
+            onChange={(e) =>
+              setEditProfileData({ ...editProfileData, name: e.target.value })
+            }
+          />
+        </div>
+        <div className="modal-field">
+          <label>Municipality:</label>
+          <select
+            value={editProfileData.municipality}
+            onChange={(e) =>
+              setEditProfileData({ ...editProfileData, municipality: e.target.value })
+            }
+            disabled={profileComplete}
+            style={{ 
+              width: "100%", 
+              padding: "8px", 
+              borderRadius: "4px", 
+              border: "1px solid #ccc",
+              backgroundColor: profileComplete ? "#f5f5f5" : "white",
+              cursor: profileComplete ? "not-allowed" : "pointer",
+              opacity: profileComplete ? 0.7 : 1
+            }}
+            title={profileComplete ? "Municipality cannot be changed after initial setup" : "Select your municipality"}
+          >
+            <option value="">Select Municipality</option>
+            {municipalities.map((municipality) => (
+              <option key={municipality} value={municipality}>
+                {municipality}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="modal-field">
+          <label>Email:</label>
+          <input
+            type="text"
+            value={auth.currentUser?.email || ""}
+            disabled
+            style={{ background: "#f1f1f1", cursor: "not-allowed" }}
+          />
+        </div>
+        <div className="modal-footer">
+          <button
+            className="save-profile-btn"
+            onClick={handleSaveProfile}
+            disabled={savingProfile || !editProfileData.name.trim() || !editProfileData.municipality.trim()}
+          >
+            {savingProfile ? "Saving..." : "Save Changes"}
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+)}
         </div>
       </div>
     </div>

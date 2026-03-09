@@ -21,7 +21,7 @@ export default function LGU() {
   const [showExportModal, setShowExportModal] = useState(false);
   const [isDraft, setIsDraft] = useState(false);
   const [activeTab, setActiveTab] = useState("financial");
-  
+  const [mlgoRemarks, setMlgoRemarks] = useState({}); // CHANGED: object per tab for PO remarks
   // State variables for all 10 categories
   const [indicators, setIndicators] = useState([]); // Financial
   const [disasterIndicators, setDisasterIndicators] = useState([]);
@@ -53,6 +53,38 @@ export default function LGU() {
   const [attachments, setAttachments] = useState({});
   const [uploadingFile, setUploadingFile] = useState(false);
   const municipalities = ["Boac", "Mogpog", "Sta. Cruz", "Torrijos", "Buenavista", "Gasan"];
+  const getTabNameFromActive = () => {
+    switch(activeTab) {
+      case 'financial': return 'Financial';
+      case 'disaster': return 'Disaster';
+      case 'social': return 'Social';
+      case 'health': return 'Health';
+      case 'education': return 'Education';
+      case 'business': return 'Business';
+      case 'safety': return 'Safety';
+      case 'environmental': return 'Environmental';
+      case 'tourism': return 'Tourism';
+      case 'youth': return 'Youth';
+      default: return 'Financial';
+    }
+  };
+
+  // Map active tab string to tab ID number
+  const getTabIdFromActive = () => {
+    switch(activeTab) {
+      case 'financial': return 1;
+      case 'disaster': return 2;
+      case 'social': return 3;
+      case 'health': return 4;
+      case 'education': return 5;
+      case 'business': return 6;
+      case 'safety': return 7;
+      case 'environmental': return 8;
+      case 'tourism': return 9;
+      case 'youth': return 10;
+      default: return 1;
+    }
+  };
 
   const [editProfileData, setEditProfileData] = useState({
     name: "",
@@ -164,92 +196,138 @@ export default function LGU() {
     return () => unsubscribe();
   }, [auth.currentUser?.uid]);
 
-  // Load user answers
-  const loadUserAnswers = async () => {
-    if (!auth.currentUser || !selectedYearDisplay) return;
+// Load user answers
+const loadUserAnswers = async () => {
+  if (!auth.currentUser || !selectedYearDisplay) return;
+  
+  try {
+    const userName = profileData.name || auth.currentUser.email || "Anonymous";
+    const cleanName = userName.replace(/[.#$\[\]]/g, '_');
     
-    try {
-      const userName = profileData.name || auth.currentUser.email || "Anonymous";
-      const cleanName = userName.replace(/[.#$\[\]]/g, '_');
+    const usersRef = ref(db, "users");
+    const usersSnapshot = await get(usersRef);
+    
+    if (usersSnapshot.exists()) {
+      const users = usersSnapshot.val();
+      let adminUid = Object.keys(users).find(
+        uid => users[uid]?.role === "admin"
+      );
       
-      const usersRef = ref(db, "users");
-      const usersSnapshot = await get(usersRef);
+      if (!adminUid) {
+        const financialRootRef = ref(db, "financial");
+        const financialRootSnapshot = await get(financialRootRef);
+        
+        if (financialRootSnapshot.exists()) {
+          const financialData = financialRootSnapshot.val();
+          adminUid = Object.keys(financialData).find(uid => 
+            financialData[uid] && financialData[uid][selectedYearDisplay]
+          );
+        }
+      }
       
-      if (usersSnapshot.exists()) {
-        const users = usersSnapshot.val();
-        let adminUid = Object.keys(users).find(
-          uid => users[uid]?.role === "admin"
+      if (adminUid) {
+        const answersRef = ref(
+          db,
+          `answers/${selectedYearDisplay}/LGU/${cleanName}`
         );
         
-        if (!adminUid) {
-          const financialRootRef = ref(db, "financial");
-          const financialRootSnapshot = await get(financialRootRef);
-          
-          if (financialRootSnapshot.exists()) {
-            const financialData = financialRootSnapshot.val();
-            adminUid = Object.keys(financialData).find(uid => 
-              financialData[uid] && financialData[uid][selectedYearDisplay]
-            );
-          }
-        }
+        const snapshot = await get(answersRef);
         
-        if (adminUid) {
-          const answersRef = ref(
-            db,
-            `answers/${selectedYearDisplay}/LGU/${cleanName}`
-          );
+        if (snapshot.exists()) {
+          const data = snapshot.val();
+          const { _metadata, ...answers } = data;
           
-          const snapshot = await get(answersRef);
+          setMetadata(_metadata || {});
+          setUserAnswers(answers || {});
           
-          if (snapshot.exists()) {
-            const data = snapshot.val();
-            const { _metadata, ...answers } = data;
-            
-            setMetadata(_metadata || {});
-            setUserAnswers(answers || {});
-            
-            const hasForwardingFlags = 
-              _metadata?.forwardedToPO === true || 
-              _metadata?.forwarded === true ||
-              _metadata?.forwardedAt || 
-              _metadata?.forwardedBy ||
-              _metadata?.forwardedTo;
-            
-            if (_metadata && _metadata.returned === true) {
-              setHasSubmitted(false);
-            } else if (hasForwardingFlags) {
-              setHasSubmitted(true);
-            } else if (_metadata && _metadata.submitted === true) {
-              setHasSubmitted(true);
-            } else {
-              setHasSubmitted(false);
-            }
+          const hasForwardingFlags = 
+            _metadata?.forwardedToPO === true || 
+            _metadata?.forwarded === true ||
+            _metadata?.forwardedAt || 
+            _metadata?.forwardedBy ||
+            _metadata?.forwardedTo;
+          
+          if (_metadata && _metadata.returned === true) {
+            setHasSubmitted(false);
+          } else if (hasForwardingFlags) {
+            setHasSubmitted(true);
+          } else if (_metadata && _metadata.submitted === true) {
+            setHasSubmitted(true);
           } else {
-            setUserAnswers({});
-            setMetadata({});
             setHasSubmitted(false);
           }
           
-          const attachmentsRef = ref(
-            db,
-            `attachments/${selectedYearDisplay}/LGU/${cleanName}`
-          );
-          const attachmentsSnapshot = await get(attachmentsRef);
-          
-          if (attachmentsSnapshot.exists()) {
-            setAttachments(attachmentsSnapshot.val());
-          } else {
-            setAttachments({});
-          }
-          
-          await loadRemarks();
-        }
-      }
-    } catch (error) {
-      console.error("Error loading answers:", error);
-      setHasSubmitted(false);
-    }
+// Replace this section (around line 455):
+if (_metadata?.mlgoRemarks) {
+  console.log("📝 MLGO Remarks found:", _metadata.mlgoRemarks);
+  setRemarks(_metadata.mlgoRemarks); // Store in remarks state
+} else if (_metadata?.remarks) {
+  console.log("📝 Single MLGO remark found:", _metadata.remarks);
+  // Convert single remark to object for backward compatibility
+  const singleRemark = _metadata.remarks;
+  const remarksObj = {
+    1: singleRemark,
+    2: singleRemark,
+    3: singleRemark,
+    4: singleRemark,
+    5: singleRemark,
+    6: singleRemark,
+    7: singleRemark,
+    8: singleRemark,
+    9: singleRemark,
+    10: singleRemark
   };
+  setRemarks(remarksObj);
+}
+
+// With:
+if (_metadata?.mlgoRemarks) {
+  console.log("📝 MLGO Remarks found:", _metadata.mlgoRemarks);
+  setMlgoRemarks(_metadata.mlgoRemarks); // Store in mlgoRemarks state
+} else if (_metadata?.remarks) {
+  console.log("📝 Single MLGO remark found:", _metadata.remarks);
+  // Convert single remark to object for backward compatibility
+  const singleRemark = _metadata.remarks;
+  const remarksObj = {
+    1: singleRemark,
+    2: singleRemark,
+    3: singleRemark,
+    4: singleRemark,
+    5: singleRemark,
+    6: singleRemark,
+    7: singleRemark,
+    8: singleRemark,
+    9: singleRemark,
+    10: singleRemark
+  };
+  setMlgoRemarks(remarksObj); // Store in mlgoRemarks state
+}
+        } else {
+          setUserAnswers({});
+          setMetadata({});
+          setHasSubmitted(false);
+        }
+        
+        const attachmentsRef = ref(
+          db,
+          `attachments/${selectedYearDisplay}/LGU/${cleanName}`
+        );
+        const attachmentsSnapshot = await get(attachmentsRef);
+        
+        if (attachmentsSnapshot.exists()) {
+          setAttachments(attachmentsSnapshot.val());
+        } else {
+          setAttachments({});
+        }
+        
+        await loadRemarks();
+      }
+    }
+  } catch (error) {
+    console.error("Error loading answers:", error);
+    setHasSubmitted(false);
+  }
+};
 
   // Fetch admin UID
   useEffect(() => {
@@ -511,9 +589,8 @@ export default function LGU() {
     fetchAllIndicators();
   }, [selectedYearDisplay, db]);
 
-  // Handle answer change
-// Handle answer change
-const handleAnswerChange = (indicatorKey, mainIndex, field, value) => {
+
+  const handleAnswerChange = (indicatorKey, mainIndex, field, value) => {
   // Check if assessment is locked
   if (hasSubmitted || metadata?.forwardedToPO) return;
   
@@ -529,6 +606,40 @@ const handleAnswerChange = (indicatorKey, mainIndex, field, value) => {
     }
   }));
 };
+
+// Separate handlers so radios/checkboxes never share keys
+const handleRadioChange = (indicatorKey, mainIndex, field, value) => {
+  if (hasSubmitted || metadata?.forwardedToPO) return;
+
+  setUserAnswers(prev => ({
+    ...prev,
+    [`${activeTab}_${indicatorKey}_${mainIndex}_radio_${field}`]: {
+      category: activeTab,
+      indicatorKey,
+      mainIndex,
+      field,
+      value,
+      timestamp: Date.now()
+    }
+  }));
+};
+
+const handleCheckboxChange = (indicatorKey, mainIndex, field, checked) => {
+  if (hasSubmitted || metadata?.forwardedToPO) return;
+
+  setUserAnswers(prev => ({
+    ...prev,
+    [`${activeTab}_${indicatorKey}_${mainIndex}_checkbox_${field}`]: {
+      category: activeTab,
+      indicatorKey,
+      mainIndex,
+      field,
+      value: checked === true,
+      timestamp: Date.now()
+    }
+  }));
+};
+
 
 // In lgu-assessment.jsx, update the handleSaveAnswers function
 const handleSaveAnswers = async () => {
@@ -1276,26 +1387,61 @@ const handleSaveAnswers = async () => {
       maxHeight: sidebarOpen ? '57vh' : '63vh',
     }}
   >
-    {/* Return Remarks Display */}
-    {hasSubmitted === false && metadata?.returned && (
-      <div style={{
-        backgroundColor: "#fff3cd",
-        border: "1px solid #ffeeba",
-        borderRadius: "8px",
-        padding: "15px",
-        marginBottom: "20px",
-        color: "#856404",
-        width: "100%"
-      }}>
-        <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px" }}>
-          <span style={{ fontSize: "18px" }}>📝</span>
-          <strong>Remarks from MLGOO:</strong>
-        </div>
-        <p style={{ margin: "0 0 0 25px", fontSize: "14px" }}>
-          {metadata?.remarks || "Please review and resubmit."}
-        </p>
+    
+{hasSubmitted === false && (metadata?.returned || metadata?.mlgoRemarks) && (
+  <div style={{
+    backgroundColor: "#fff3cd",
+    border: "1px solid #ffeeba",
+    borderRadius: "8px",
+    padding: "20px",
+    marginBottom: "25px",
+    color: "#856404",
+    width: "100%"
+  }}>
+    <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "15px" }}>
+      <span style={{ fontSize: "20px" }}>📝</span>
+      <strong style={{ fontSize: "16px" }}>Remarks from MLGO:</strong>
+    </div>
+    
+    {/* Display remarks for current tab */}
+    <div style={{
+      backgroundColor: "white",
+      border: "1px solid #ffeeba",
+      borderRadius: "8px",
+      padding: "15px",
+      marginBottom: "15px"
+    }}>
+      <div style={{ fontWeight: "600", marginBottom: "8px", color: "#856404" }}>
+        For {getTabNameFromActive()} Tab:
       </div>
-    )}
+      <div style={{ 
+        fontSize: "14px",
+        lineHeight: "1.5",
+        whiteSpace: "pre-wrap",
+        wordBreak: "break-word"
+      }}>
+        {mlgoRemarks && typeof mlgoRemarks === 'object' ? (
+          // Convert tab ID to string when accessing the object
+          mlgoRemarks[String(getTabIdFromActive())] ? (
+            mlgoRemarks[String(getTabIdFromActive())]
+          ) : (
+            <span style={{ fontStyle: "italic", color: "#999" }}>
+              No specific remark for this tab
+            </span>
+          )
+        ) : mlgoRemarks && typeof mlgoRemarks === 'string' ? (
+          mlgoRemarks
+        ) : (
+          <span style={{ fontStyle: "italic", color: "#999" }}>
+            No specific remark for this tab
+          </span>
+        )}
+      </div>
+    </div>
+    
+
+  </div>
+)}
 
     {currentIndicators.length === 0 ? (
       <p style={{ textAlign: "center", marginTop: "20px" }}>
@@ -1308,8 +1454,9 @@ const handleSaveAnswers = async () => {
             
             {/* Main Indicators */}
             {record.mainIndicators?.map((main, index) => {
-              const answerKey = `${activeTab}_${record.firebaseKey}_${index}_${main.title}`;
-              const answer = userAnswers[answerKey];
+              const legacyAnswerKey = `${activeTab}_${record.firebaseKey}_${index}_${main.title}`;
+              const radioAnswerKey = `${activeTab}_${record.firebaseKey}_${index}_radio_${main.title}`;
+              const answer = userAnswers[radioAnswerKey] ?? userAnswers[legacyAnswerKey];
               
               return (
                 <div key={index} className="reference-wrapper">
@@ -1338,16 +1485,29 @@ const handleSaveAnswers = async () => {
                       <div className="field-content">
                         {main.fieldType === "multiple" &&
                           main.choices.map((choice, i) => {
-                            const isSelected = answer?.value === choice;
+                            const choiceLabel =
+                              choice && typeof choice === "object"
+                                ? (choice.label ?? choice.value ?? choice.name ?? choice.title ?? choice.text ?? "")
+                                : choice;
+                            const choiceValueRaw =
+                              choice && typeof choice === "object"
+                                ? (choice.value ?? choice.label ?? choice.name ?? choice.title ?? choice.text ?? "")
+                                : choice;
+                            const choiceIndexValue = String(i);
+                            const savedValue = String(answer?.value ?? "");
+                            const isSelected =
+                              savedValue === choiceIndexValue ||
+                              (choiceValueRaw !== "" && choiceValueRaw !== null && choiceValueRaw !== undefined && savedValue === String(choiceValueRaw)) ||
+                              (choiceLabel !== "" && choiceLabel !== null && choiceLabel !== undefined && savedValue === String(choiceLabel));
                             
                             return (
                               <div key={i} style={{ marginBottom: "4px" }}>
                                 <input 
                                   type="radio" 
-                                  name={`${record.firebaseKey}_${index}`}
-                                  value={choice}
+                                  name={`${activeTab}_${record.firebaseKey}_main_${index}`}
+                                  value={choiceIndexValue}
                                   checked={isSelected}
-                                  onChange={(e) => handleAnswerChange(
+                                  onChange={(e) => handleRadioChange(
                                     record.firebaseKey,
                                     index,
                                     main.title,
@@ -1356,7 +1516,7 @@ const handleSaveAnswers = async () => {
                                   disabled={hasSubmitted || metadata?.forwardedToPO}
                                 /> 
                                 <span style={{ marginLeft: "4px" }}>
-                                  {choice || <span style={{ fontStyle: "italic", color: "gray" }}>Empty Option</span>}
+                                  {choiceLabel || <span style={{ fontStyle: "italic", color: "gray" }}>Empty Option</span>}
                                 </span>
                               </div>
                             );
@@ -1364,15 +1524,17 @@ const handleSaveAnswers = async () => {
 
                         {main.fieldType === "checkbox" &&
                           main.choices.map((choice, i) => {
-                            const checkboxKey = `${activeTab}_${record.firebaseKey}_${index}_${main.title}_${i}`;
-                            const isChecked = userAnswers[checkboxKey]?.value === true;
+                            const legacyCheckboxKey = `${activeTab}_${record.firebaseKey}_${index}_${main.title}_${i}`;
+                            const checkboxKey = `${activeTab}_${record.firebaseKey}_${index}_checkbox_${main.title}_${i}`;
+                            const isChecked =
+                              (userAnswers[checkboxKey]?.value ?? userAnswers[legacyCheckboxKey]?.value) === true;
                             
                             return (
                               <div key={i} style={{ marginBottom: "4px" }}>
                                 <input 
                                   type="checkbox" 
                                   checked={isChecked}
-                                  onChange={(e) => handleAnswerChange(
+                                  onChange={(e) => handleCheckboxChange(
                                     record.firebaseKey,
                                     index,
                                     `${main.title}_${i}`,
@@ -1568,8 +1730,9 @@ const handleSaveAnswers = async () => {
 
             {/* Sub Indicators */}
             {record.subIndicators?.map((sub, index) => {
-              const answerKey = `${activeTab}_${record.firebaseKey}_sub_${index}_${sub.title}`;
-              const answer = userAnswers[answerKey];
+              const legacyAnswerKey = `${activeTab}_${record.firebaseKey}_sub_${index}_${sub.title}`;
+              const radioAnswerKey = `${activeTab}_${record.firebaseKey}_sub_${index}_radio_${sub.title}`;
+              const answer = userAnswers[radioAnswerKey] ?? userAnswers[legacyAnswerKey];
               
               return (
                 <div key={index} className="reference-wrapper">
@@ -1601,16 +1764,29 @@ const handleSaveAnswers = async () => {
                     }}>
                       {sub.fieldType === "multiple" &&
                         sub.choices.map((choice, i) => {
-                          const isSelected = answer?.value === choice;
+                          const choiceLabel =
+                            choice && typeof choice === "object"
+                              ? (choice.label ?? choice.value ?? choice.name ?? choice.title ?? choice.text ?? "")
+                              : choice;
+                          const choiceValueRaw =
+                            choice && typeof choice === "object"
+                              ? (choice.value ?? choice.label ?? choice.name ?? choice.title ?? choice.text ?? "")
+                              : choice;
+                          const choiceIndexValue = String(i);
+                          const savedValue = String(answer?.value ?? "");
+                          const isSelected =
+                            savedValue === choiceIndexValue ||
+                            (choiceValueRaw !== "" && choiceValueRaw !== null && choiceValueRaw !== undefined && savedValue === String(choiceValueRaw)) ||
+                            (choiceLabel !== "" && choiceLabel !== null && choiceLabel !== undefined && savedValue === String(choiceLabel));
                           
                           return (
                             <div key={i} style={{ marginBottom: "4px" }}>
                               <input 
                                 type="radio" 
-                                name={`${record.firebaseKey}_sub_${index}`}
-                                value={choice}
+                                name={`${activeTab}_${record.firebaseKey}_sub_${index}`}
+                                value={choiceIndexValue}
                                 checked={isSelected}
-                                onChange={(e) => handleAnswerChange(
+                                onChange={(e) => handleRadioChange(
                                   record.firebaseKey,
                                   `sub_${index}`,
                                   sub.title,
@@ -1619,7 +1795,7 @@ const handleSaveAnswers = async () => {
                                 disabled={hasSubmitted || metadata?.forwardedToPO}
                               /> 
                               <span style={{ marginLeft: "4px" }}>
-                                {choice || <span style={{ fontStyle: "italic", color: "gray" }}>Empty Option</span>}
+                                {choiceLabel || <span style={{ fontStyle: "italic", color: "gray" }}>Empty Option</span>}
                               </span>
                             </div>
                           );
@@ -1627,15 +1803,17 @@ const handleSaveAnswers = async () => {
 
                       {sub.fieldType === "checkbox" &&
                         sub.choices.map((choice, i) => {
-                          const checkboxKey = `${activeTab}_${record.firebaseKey}_sub_${index}_${sub.title}_${i}`;
-                          const isChecked = userAnswers[checkboxKey]?.value === true;
+                          const legacyCheckboxKey = `${activeTab}_${record.firebaseKey}_sub_${index}_${sub.title}_${i}`;
+                          const checkboxKey = `${activeTab}_${record.firebaseKey}_sub_${index}_checkbox_${sub.title}_${i}`;
+                          const isChecked =
+                            (userAnswers[checkboxKey]?.value ?? userAnswers[legacyCheckboxKey]?.value) === true;
                           
                           return (
                             <div key={i} style={{ marginBottom: "4px" }}>
                               <input 
                                 type="checkbox" 
                                 checked={isChecked}
-                                onChange={(e) => handleAnswerChange(
+                                onChange={(e) => handleCheckboxChange(
                                   record.firebaseKey,
                                   `sub_${index}`,
                                   `${sub.title}_${i}`,
@@ -1826,158 +2004,174 @@ const handleSaveAnswers = async () => {
                     </div>
                   )}
 
-                  {/* ===== NESTED SUB-INDICATORS SECTION - EXACT STYLE FROM po-view ===== */}
-                  {sub.nestedSubIndicators && sub.nestedSubIndicators.length > 0 && (
-                    <div className="nested-reference-wrapper" style={{ marginLeft: "30px", marginTop: "10px" }}>
-                      {sub.nestedSubIndicators.map((nested, nestedIndex) => {
-                        const nestedAnswerKey = `${activeTab}_${record.firebaseKey}_sub_${index}_nested_${nestedIndex}_${nested.title}`;
-                        const nestedAnswer = userAnswers[nestedAnswerKey];
-                        
-                        return (
-                          <div key={nested.id || nestedIndex} className="nested-reference-item" style={{ marginBottom: "15px" }}>
-                            <div className="nested-reference-row" style={{ display: "flex", border: "1px solid #cfcfcf" }}>
-                              <div className="nested-reference-label" style={{ 
-                                width: "45%", 
-                                background: "#f0f0f0", // Light gray for nested indicators
-                                padding: "8px 12px",
-                                fontWeight: 500,
-                                borderRight: "1px solid #cfcfcf"
-                              }}>
-                                {nested.title || 'Untitled'}
-                              </div>
-                              <div className="nested-reference-field" style={{ 
-                                width: "55%", 
-                                padding: "8px 12px",
-                                background: "#ffffff"
-                              }}>
-                                {/* Nested Multiple Choice */}
-                                {nested.fieldType === "multiple" && nested.choices?.map((choice, i) => {
-                                  const isSelected = nestedAnswer?.value === choice;
-                                  
-                                  return (
-                                    <div key={i} style={{ marginBottom: "4px" }}>
-                                      <input 
-                                        type="radio" 
-                                        name={`${record.firebaseKey}_sub_${index}_nested_${nestedIndex}`}
-                                        value={choice}
-                                        checked={isSelected}
-                                        onChange={(e) => handleAnswerChange(
-                                          record.firebaseKey,
-                                          `sub_${index}_nested_${nestedIndex}`,
-                                          nested.title,
-                                          e.target.value
-                                        )}
-                                        disabled={hasSubmitted || metadata?.forwardedToPO}
-                                      /> 
-                                      <span style={{ marginLeft: "4px" }}>{choice}</span>
-                                    </div>
-                                  );
-                                })}
+  {/* ===== NESTED SUB-INDICATORS SECTION ===== */}
+{sub.nestedSubIndicators && sub.nestedSubIndicators.length > 0 && (
+  <div className="nested-reference-wrapper" style={{ marginLeft: "30px", marginTop: "10px" }}>
+    {sub.nestedSubIndicators.map((nested, nestedIndex) => {
+      const legacyNestedAnswerKey = `${activeTab}_${record.firebaseKey}_sub_${index}_nested_${nestedIndex}_${nested.title}`;
+      const nestedRadioAnswerKey = `${activeTab}_${record.firebaseKey}_sub_${index}_nested_${nestedIndex}_radio_${nested.title}`;
+      const nestedAnswer = userAnswers[nestedRadioAnswerKey] ?? userAnswers[legacyNestedAnswerKey];
+      
+      return (
+        <div key={nested.id || nestedIndex} className="nested-reference-item" style={{ marginBottom: "15px" }}>
+          <div className="nested-reference-row" style={{ display: "flex", border: "1px solid #cfcfcf" }}>
+            <div className="nested-reference-label" style={{ 
+              width: "45%", 
+              background: "#f0f0f0",
+              padding: "8px 12px",
+              fontWeight: 500,
+              borderRight: "1px solid #cfcfcf"
+            }}>
+              {nested.title || 'Untitled'}
+            </div>
+            <div className="nested-reference-field" style={{ 
+              width: "55%", 
+              padding: "8px 12px",
+              background: "#ffffff"
+            }}>
+              {/* Nested Multiple Choice - FIXED: Add unique name */}
+              {nested.fieldType === "multiple" && nested.choices?.map((choice, i) => {
+                const choiceLabel =
+                  choice && typeof choice === "object"
+                    ? (choice.label ?? choice.value ?? choice.name ?? choice.title ?? choice.text ?? "")
+                    : choice;
+                const choiceValueRaw =
+                  choice && typeof choice === "object"
+                    ? (choice.value ?? choice.label ?? choice.name ?? choice.title ?? choice.text ?? "")
+                    : choice;
+                const choiceIndexValue = String(i);
+                const savedValue = String(nestedAnswer?.value ?? "");
+                const isSelected =
+                  savedValue === choiceIndexValue ||
+                  (choiceValueRaw !== "" && choiceValueRaw !== null && choiceValueRaw !== undefined && savedValue === String(choiceValueRaw)) ||
+                  (choiceLabel !== "" && choiceLabel !== null && choiceLabel !== undefined && savedValue === String(choiceLabel));
+                
+                return (
+                  <div key={i} style={{ marginBottom: "4px" }}>
+                    <input 
+                      type="radio" 
+                      name={`${activeTab}_${record.firebaseKey}_sub_${index}_nested_${nestedIndex}`}
+                      value={choiceIndexValue}
+                      checked={isSelected}
+                      onChange={(e) => handleRadioChange(
+                        record.firebaseKey,
+                        `sub_${index}_nested_${nestedIndex}`,
+                        nested.title,
+                        e.target.value
+                      )}
+                      disabled={hasSubmitted || metadata?.forwardedToPO}
+                    /> 
+                    <span style={{ marginLeft: "4px" }}>{choiceLabel}</span>
+                  </div>
+                );
+              })}
 
-                                {/* Nested Checkbox */}
-                                {nested.fieldType === "checkbox" && nested.choices?.map((choice, i) => {
-                                  const nestedCheckboxKey = `${activeTab}_${record.firebaseKey}_sub_${index}_nested_${nestedIndex}_${nested.title}_${i}`;
-                                  const isChecked = userAnswers[nestedCheckboxKey]?.value === true;
-                                  
-                                  return (
-                                    <div key={i} style={{ marginBottom: "4px" }}>
-                                      <input 
-                                        type="checkbox" 
-                                        checked={isChecked}
-                                        onChange={(e) => handleAnswerChange(
-                                          record.firebaseKey,
-                                          `sub_${index}_nested_${nestedIndex}`,
-                                          `${nested.title}_${i}`,
-                                          e.target.checked
-                                        )}
-                                        disabled={hasSubmitted || metadata?.forwardedToPO}
-                                      /> 
-                                      <span style={{ marginLeft: "4px" }}>{choice}</span>
-                                    </div>
-                                  );
-                                })}
+{/* Nested Checkbox */}
+{nested.fieldType === "checkbox" && nested.choices?.map((choice, i) => {
+  const legacyNestedCheckboxKey = `${activeTab}_${record.firebaseKey}_sub_${index}_nested_${nestedIndex}_${nested.title}_${i}`;
+  const nestedCheckboxKey = `${activeTab}_${record.firebaseKey}_sub_${index}_nested_${nestedIndex}_checkbox_${nested.title}_${i}`;
+  const isChecked =
+    (userAnswers[nestedCheckboxKey]?.value ?? userAnswers[legacyNestedCheckboxKey]?.value) === true;
+  
+  return (
+    <div key={i} style={{ marginBottom: "4px" }}>
+      <input 
+        type="checkbox" 
+        checked={isChecked}
+        onChange={(e) => handleCheckboxChange(
+          record.firebaseKey,
+          `sub_${index}_nested_${nestedIndex}`,
+          `${nested.title}_${i}`,
+          e.target.checked
+        )}
+        disabled={hasSubmitted || metadata?.forwardedToPO}
+      /> 
+      <span style={{ marginLeft: "4px" }}>{choice}</span>
+    </div>
+  );
+})}
 
-                                {/* Nested Short Answer */}
-                                {nested.fieldType === "short" && (
-                                  <input
-                                    type="text"
-                                    style={{ width: "100%", padding: "6px", borderRadius: "4px", border: "1px solid #ccc" }}
-                                    placeholder="Enter your answer..."
-                                    value={nestedAnswer?.value || ""}
-                                    onChange={(e) => handleAnswerChange(
-                                      record.firebaseKey,
-                                      `sub_${index}_nested_${nestedIndex}`,
-                                      nested.title,
-                                      e.target.value
-                                    )}
-                                    disabled={hasSubmitted || metadata?.forwardedToPO}
-                                  />
-                                )}
-
-                                {/* Nested Integer */}
-                                {nested.fieldType === "integer" && (
-                                  <input
-                                    type="number"
-                                    style={{ width: "100%", padding: "6px", borderRadius: "4px", border: "1px solid #ccc" }}
-                                    placeholder="Enter a number..."
-                                    value={nestedAnswer?.value || ""}
-                                    onChange={(e) => handleAnswerChange(
-                                      record.firebaseKey,
-                                      `sub_${index}_nested_${nestedIndex}`,
-                                      nested.title,
-                                      e.target.value
-                                    )}
-                                    disabled={hasSubmitted || metadata?.forwardedToPO}
-                                  />
-                                )}
-
-                                {/* Nested Date */}
-                                {nested.fieldType === "date" && (
-                                  <input
-                                    type="date"
-                                    style={{ width: "100%", padding: "6px", borderRadius: "4px", border: "1px solid #ccc" }}
-                                    value={nestedAnswer?.value || ""}
-                                    onChange={(e) => handleAnswerChange(
-                                      record.firebaseKey,
-                                      `sub_${index}_nested_${nestedIndex}`,
-                                      nested.title,
-                                      e.target.value
-                                    )}
-                                    disabled={hasSubmitted || metadata?.forwardedToPO}
-                                  />
-                                )}
-
-                                {/* No field type selected */}
-                                {!nested.fieldType && (
-                                  <span style={{ fontStyle: "italic", color: "gray" }}>
-                                    No field type selected
-                                  </span>
-                                )}
-                              </div>
-                            </div>
-                            
-                            {/* Verification for nested sub-indicator */}
-                            {nested.verification && (
-                              <div className="nested-verification" style={{
-                                padding: "6px 12px",
-                                background: "#ffffff",
-                                border: "1px solid #cfcfcf",
-                                borderTop: "none",
-                                fontSize: "11px"
-                              }}>
-                                <span style={{ fontWeight: 700, marginRight: "6px", color: "#081a4b" }}>
-                                  Mode of Verification:
-                                </span>
-                                <span style={{ fontStyle: "italic" }}>
-                                  {nested.verification}
-                                </span>
-                              </div>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
+              {/* Nested Short Answer */}
+              {nested.fieldType === "short" && (
+                <input
+                  type="text"
+                  style={{ width: "100%", padding: "6px", borderRadius: "4px", border: "1px solid #ccc" }}
+                  placeholder="Enter your answer..."
+                  value={nestedAnswer?.value || ""}
+                  onChange={(e) => handleAnswerChange(
+                    record.firebaseKey,
+                    `sub_${index}_nested_${nestedIndex}`,
+                    nested.title,
+                    e.target.value
                   )}
+                  disabled={hasSubmitted || metadata?.forwardedToPO}
+                />
+              )}
+
+              {/* Nested Integer */}
+              {nested.fieldType === "integer" && (
+                <input
+                  type="number"
+                  style={{ width: "100%", padding: "6px", borderRadius: "4px", border: "1px solid #ccc" }}
+                  placeholder="Enter a number..."
+                  value={nestedAnswer?.value || ""}
+                  onChange={(e) => handleAnswerChange(
+                    record.firebaseKey,
+                    `sub_${index}_nested_${nestedIndex}`,
+                    nested.title,
+                    e.target.value
+                  )}
+                  disabled={hasSubmitted || metadata?.forwardedToPO}
+                />
+              )}
+
+              {/* Nested Date */}
+              {nested.fieldType === "date" && (
+                <input
+                  type="date"
+                  style={{ width: "100%", padding: "6px", borderRadius: "4px", border: "1px solid #ccc" }}
+                  value={nestedAnswer?.value || ""}
+                  onChange={(e) => handleAnswerChange(
+                    record.firebaseKey,
+                    `sub_${index}_nested_${nestedIndex}`,
+                    nested.title,
+                    e.target.value
+                  )}
+                  disabled={hasSubmitted || metadata?.forwardedToPO}
+                />
+              )}
+
+              {/* No field type selected */}
+              {!nested.fieldType && (
+                <span style={{ fontStyle: "italic", color: "gray" }}>
+                  No field type selected
+                </span>
+              )}
+            </div>
+          </div>
+          
+          {/* Verification for nested sub-indicator */}
+          {nested.verification && (
+            <div className="nested-verification" style={{
+              padding: "6px 12px",
+              background: "#ffffff",
+              border: "1px solid #cfcfcf",
+              borderTop: "none",
+              fontSize: "11px"
+            }}>
+              <span style={{ fontWeight: 700, marginRight: "6px", color: "#081a4b" }}>
+                Mode of Verification:
+              </span>
+              <span style={{ fontStyle: "italic" }}>
+                {nested.verification}
+              </span>
+            </div>
+          )}
+        </div>
+      );
+    })}
+  </div>
+)}
                   {/* ===== END NESTED SUB-INDICATORS SECTION ===== */}
                 </div>
               );
