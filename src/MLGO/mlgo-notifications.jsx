@@ -49,18 +49,18 @@ export default function MLGONotification() {
   const [notificationLoading, setNotificationLoading] = useState(true);
   const [notificationCurrentPage, setNotificationCurrentPage] = useState(1);
   const [notificationItemsPerPage] = useState(20);
-
+  const [userMunicipality, setUserMunicipality] = useState(""); 
   useEffect(() => {
     if (!auth.currentUser) return;
-
+  
     const profileRef = ref(db, `profiles/${auth.currentUser.uid}`);
     onValue(profileRef, (snapshot) => {
       if (snapshot.exists()) {
         const profile = snapshot.val();
         setProfileData(profile);
         setEditProfileData(profile);
-
-        // Check if profile has required fields
+        setUserMunicipality(profile.municipality || ""); // ADDED: Store MLGO's municipality
+  
         if (profile.name && profile.municipality) {
           setProfileComplete(true);
           setShowEditProfileModal(false);
@@ -214,8 +214,8 @@ export default function MLGONotification() {
 
   // Load notifications
   useEffect(() => {
-    if (!auth.currentUser) return;
-
+    if (!auth.currentUser || !userMunicipality) return; // Wait for municipality
+  
     const loadNotifications = async () => {
       setNotificationLoading(true);
       try {
@@ -234,16 +234,27 @@ export default function MLGONotification() {
             if (yearData.MLGO && yearData.MLGO[userUid]) {
               const yearNotifications = yearData.MLGO[userUid];
               Object.keys(yearNotifications).forEach(key => {
-                allNotifications.push({
-                  id: key,
-                  year: year,
-                  ...yearNotifications[key]
-                });
+                const notification = yearNotifications[key];
+                
+                // FILTER BY MUNICIPALITY: Only show notifications for this MLGO's municipality
+                // Notifications from LGU will have municipality field
+                const notificationMunicipality = notification.municipality;
+                
+                // If the notification has a municipality, check if it matches the MLGO's municipality
+                if (!notificationMunicipality || notificationMunicipality === userMunicipality) {
+                  allNotifications.push({
+                    id: key,
+                    year: year,
+                    ...notification
+                  });
+                } else {
+                  console.log(`Filtering out notification from municipality ${notificationMunicipality} (MLGO is ${userMunicipality})`);
+                }
               });
             }
           });
         }
-
+  
         allNotifications.sort((a, b) => b.timestamp - a.timestamp);
         setNotifications(allNotifications);
         setNotificationLoading(false);
@@ -252,9 +263,11 @@ export default function MLGONotification() {
         setNotificationLoading(false);
       }
     };
-
-    loadNotifications();
-  }, [profileData.name]);
+  
+    if (userMunicipality) {
+      loadNotifications();
+    }
+  }, [profileData.name, userMunicipality]); 
 
   // Delete notification
   const deleteNotification = async (notificationId, year) => {

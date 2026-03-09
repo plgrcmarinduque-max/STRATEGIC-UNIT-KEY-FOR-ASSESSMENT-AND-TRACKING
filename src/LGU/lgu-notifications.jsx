@@ -26,77 +26,75 @@ export default function LGUNotification() {
   
   const user = auth.currentUser;
   const displayName = user?.email || "User";
-
-  // Load profile
+  const [userMunicipality, setUserMunicipality] = useState("");
   useEffect(() => {
     if (!auth.currentUser) return;
-
+  
     const profileRef = ref(db, `profiles/${auth.currentUser.uid}`);
     onValue(profileRef, (snapshot) => {
       if (snapshot.exists()) {
         const profile = snapshot.val();
         setProfileData(profile);
         setEditProfileData(profile);
+        setUserMunicipality(profile.municipality || ""); // ADDED: Store user's municipality
       }
     });
   }, []);
 
 
   
-  // Load notifications from ALL years
   useEffect(() => {
-    if (!auth.currentUser) return;
-
+    if (!auth.currentUser || !userMunicipality) return; // Wait for municipality
+  
     const loadAllNotifications = async () => {
       setLoading(true);
       try {
-        const userName = profileData.name || auth.currentUser.email || "Anonymous";
-        const cleanName = userName.replace(/[.#$\[\]]/g, '_');
-        
-const userUid = auth.currentUser?.uid;
-
-if (!userUid) return;
-
-console.log("Loading notifications for UID:", userUid);
-
-// Get all years from the notifications root
-const notificationsRootRef = ref(db, `notifications`);
-const rootSnapshot = await get(notificationsRootRef);
-
-let allNotifications = [];
-
-if (rootSnapshot.exists()) {
-  const yearsData = rootSnapshot.val();
+        const userUid = auth.currentUser?.uid;
+        if (!userUid) return;
   
-  // Loop through each year
-  Object.keys(yearsData).forEach(year => {
-    const yearData = yearsData[year];
-    
-    // Check if this year has LGU notifications for this user UID
-    if (yearData.LGU && yearData.LGU[userUid]) {
-      const yearNotifications = yearData.LGU[userUid];
-      
-      // Convert to array and add year info
-      Object.keys(yearNotifications).forEach(key => {
-        const notification = yearNotifications[key];
-        allNotifications.push({
-          id: key,
-          year: year,
-          ...notification
-        });
-      });
-    }
-  });
-}
-
-
+        console.log("Loading notifications for UID:", userUid, "Municipality:", userMunicipality);
+  
+        const notificationsRootRef = ref(db, `notifications`);
+        const rootSnapshot = await get(notificationsRootRef);
+  
+        let allNotifications = [];
+  
+        if (rootSnapshot.exists()) {
+          const yearsData = rootSnapshot.val();
+          
+          Object.keys(yearsData).forEach(year => {
+            const yearData = yearsData[year];
+            
+            // Check if this year has LGU notifications for this user UID
+            if (yearData.LGU && yearData.LGU[userUid]) {
+              const yearNotifications = yearData.LGU[userUid];
+              
+              Object.keys(yearNotifications).forEach(key => {
+                const notification = yearNotifications[key];
+                
+                // FILTER BY MUNICIPALITY: Only show notifications for this LGU's municipality
+                // Notifications from MLGO will have fromMunicipality or municipality field
+                const notificationMunicipality = notification.fromMunicipality || notification.municipality;
+                
+                // If the notification has a municipality, check if it matches the user's municipality
+                if (!notificationMunicipality || notificationMunicipality === userMunicipality) {
+                  allNotifications.push({
+                    id: key,
+                    year: year,
+                    ...notification
+                  });
+                } else {
+                  console.log(`Filtering out notification from ${notificationMunicipality} (user is ${userMunicipality})`);
+                }
+              });
+            }
+          });
+        }
+  
         // Sort by timestamp (newest first)
         allNotifications.sort((a, b) => b.timestamp - a.timestamp);
         setNotifications(allNotifications);
-        console.log("Loaded notifications:", allNotifications);
-        
-        // Also load remarks
-        await loadRemarks(cleanName);
+        console.log("Loaded filtered notifications:", allNotifications.length);
         
         setLoading(false);
       } catch (error) {
@@ -104,9 +102,11 @@ if (rootSnapshot.exists()) {
         setLoading(false);
       }
     };
-
-    loadAllNotifications();
-  }, [profileData.name]);
+  
+    if (userMunicipality) {
+      loadAllNotifications();
+    }
+  }, [profileData.name, userMunicipality]);
 
 
 // Load remarks using UID

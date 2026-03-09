@@ -760,10 +760,11 @@ const handleSaveAnswers = async () => {
             message: `Assessment from ${profileData.name || auth.currentUser.email} has been submitted.`,
             from: auth.currentUser?.email,
             fromName: profileData.name || auth.currentUser?.email,
+            fromMunicipality: userMunicipality, // ADDED: LGU's municipality
             timestamp: Date.now(),
             read: false,
             year: selectedYearDisplay,
-            municipality: userMunicipality,
+            municipality: userMunicipality, // ADDED: Municipality for filtering
             action: "view_assessment"
           };
           

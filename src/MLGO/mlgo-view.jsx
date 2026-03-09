@@ -610,38 +610,39 @@ const handleReturnToLGU = async () => {
       await set(answersRef, updatedData);
       console.log("✅ Assessment returned to LGU successfully");
       
-      const lguUid = currentData._metadata?.uid;
-      const municipality = lgu.municipality; // Get municipality from the LGU data
+// In handleReturnToLGU function, replace the notification creation section with:
 
-      if (lguUid) {
-        console.log("Sending notification to LGU with UID:", lguUid, "Municipality:", municipality);
-        
-        const notificationRef = ref(db, `notifications/${selectedYear}/LGU/${lguUid}`);
-        const notificationId = Date.now().toString();
-        
-        // Ensure all values are defined (not undefined)
-        const notificationData = {
-          id: notificationId,
-          type: "assessment_returned",
-          title: `Assessment Form (${selectedYear}) was returned for revision.`,
-          message: currentTabRemark || "Please check the remarks and resubmit.",
-          from: auth.currentUser?.email || "",
-          fromName: profileData.name || auth.currentUser?.email || "",
-          timestamp: Date.now(),
-          read: false,
-          year: selectedYear,
-          municipality: municipality || "",
-          tabName: getTabName(activeTab) || "",
-          tabRemarks: currentTabRemark || "", // Ensure this is never undefined
-          allRemarks: allRemarks || {}, // Include all remarks for reference
-          action: "edit_assessment"
-        };
-        
-        await set(ref(db, `notifications/${selectedYear}/LGU/${lguUid}/${notificationId}`), notificationData);
-        console.log("✅ Notification saved to:", `notifications/${selectedYear}/LGU/${lguUid}/${notificationId}`);
-      } else {
-        console.error("No LGU UID found for notification");
-      }
+const lguUid = currentData._metadata?.uid;
+const municipality = profileData.municipality || location.state?.municipality; // Get MLGO's municipality
+
+if (lguUid) {
+  console.log("Sending notification to LGU with UID:", lguUid, "Municipality:", municipality);
+  
+  const notificationRef = ref(db, `notifications/${selectedYear}/LGU/${lguUid}`);
+  const notificationId = Date.now().toString();
+  
+  // Ensure all values are defined (not undefined)
+  const notificationData = {
+    id: notificationId,
+    type: "assessment_returned",
+    title: `Assessment Form (${selectedYear}) was returned for revision.`,
+    message: currentTabRemark || "Please check the remarks and resubmit.",
+    from: auth.currentUser?.email || "",
+    fromName: profileData.name || auth.currentUser?.email || "",
+    fromMunicipality: municipality || "", // ADDED: MLGO's municipality
+    timestamp: Date.now(),
+    read: false,
+    year: selectedYear,
+    municipality: municipality || "", // ADDED: Municipality for filtering
+    tabName: getTabName(activeTab) || "",
+    tabRemarks: currentTabRemark || "",
+    allRemarks: allRemarks || {},
+    action: "edit_assessment"
+  };
+  
+  await set(ref(db, `notifications/${selectedYear}/LGU/${lguUid}/${notificationId}`), notificationData);
+  console.log("✅ Notification saved with municipality:", municipality);
+}
       
       alert("Assessment returned to LGU successfully!");
       
