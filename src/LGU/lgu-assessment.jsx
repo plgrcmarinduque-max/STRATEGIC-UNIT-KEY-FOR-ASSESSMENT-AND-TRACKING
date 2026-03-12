@@ -2481,9 +2481,6 @@ const handleSaveAnswers = async () => {
     >
       <div className={styles.pdfIcon}></div>
       <h4>Export {activeTab ? tabs.find(t => t.id === activeTab)?.name : "Current"}</h4>
-      <p style={{ fontSize: "11px", color: "#666", margin: "2px 0 0 0" }}>
-        {activeTab ? tabs.find(t => t.id === activeTab)?.name : "Current"}
-      </p>
     </div>
     
     <div 
