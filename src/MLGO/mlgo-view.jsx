@@ -1008,7 +1008,7 @@ const exportTabToPDF = async () => {
     const doc = new jsPDF({      
       orientation: "portrait",      
       unit: "pt",      
-      format: "a4"    
+      format: "A4"    
     });     
     
     const pageWidth = doc.internal.pageSize.getWidth();    
@@ -1504,7 +1504,7 @@ const exportAllTabsToPDF = async () => {
     const doc = new jsPDF({
       orientation: 'portrait',
       unit: 'pt',
-      format: 'a4'
+      format: 'A4'
     });
     
     const pageWidth = doc.internal.pageSize.getWidth();
