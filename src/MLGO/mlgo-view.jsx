@@ -3120,7 +3120,7 @@ useEffect(() => {
                             }}
                           >
                             <span>⚐</span>
-                            {verifiedFlag[activeTab] ? `Remove Flag from Tab` : `Flag Tab as Verified`}
+                            {verifiedFlag[activeTab] ? `Remove Flag` : `Flag as Verified`}
                           </button>
                           
                           <div 
