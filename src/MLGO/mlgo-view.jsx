@@ -1488,7 +1488,7 @@ const exportAllTabsToPDF = async () => {
   }
 
   if (!tabs.length) {
-    alert("No tabs available to export");
+    alert("No areas available to export");
     return;
   }
 
@@ -2237,11 +2237,11 @@ useEffect(() => {
             className={style.exportDropdownItem}
             onClick={() => {
               if (!tabs.length) {
-                alert("No tabs available to export");
+                alert("No area available to export");
                 return;
               }
               if (!activeTab) {
-                alert("Please select a tab first");
+                alert("Please select a area first");
                 return;
               }
               exportTabToPDF();
@@ -2261,9 +2261,9 @@ useEffect(() => {
                 📄
               </div>
               <div>
-                <h4 style={{ margin: "0 0 4px 0", fontSize: "14px", fontWeight: "600" }}>Export Current Tab</h4>
+                <h4 style={{ margin: "0 0 4px 0", fontSize: "14px", fontWeight: "600" }}>Export Current Area</h4>
                 <p style={{ margin: 0, fontSize: "12px", color: "#666" }}>
-                  Export only the {tabs.find(t => t.id === activeTab)?.name || 'current'} tab as PDF
+                  Export only the {tabs.find(t => t.id === activeTab)?.name || 'current'} area
                 </p>
               </div>
             </div>
@@ -2274,7 +2274,7 @@ useEffect(() => {
             className={style.exportDropdownItem}
             onClick={() => {
               if (!tabs.length) {
-                alert("No tabs available to export");
+                alert("No areas available to export");
                 return;
               }
               exportAllTabsToPDF();
@@ -2294,9 +2294,9 @@ useEffect(() => {
                 📚
               </div>
               <div>
-                <h4 style={{ margin: "0 0 4px 0", fontSize: "14px", fontWeight: "600" }}>Export All Tabs</h4>
+                <h4 style={{ margin: "0 0 4px 0", fontSize: "14px", fontWeight: "600" }}>Export All Areas</h4>
                 <p style={{ margin: 0, fontSize: "12px", color: "#666" }}>
-                  Export all {tabs.length} tabs as a single PDF
+                  Export all {tabs.length} areas
                 </p>
               </div>
             </div>
