@@ -80,9 +80,14 @@ export default function App() {
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
       const user = userCredential.user;
   
-      // 🚫 Require email verification
-      if (!user.emailVerified) {
+      await user.reload();
+
+      const refreshedUser = auth.currentUser;
+      
+      if (!refreshedUser.emailVerified) {
         alert("Please verify your email before logging in.");
+        await sendEmailVerification(refreshedUser);
+        await auth.signOut();
         return;
       }
   
@@ -107,7 +112,9 @@ export default function App() {
         await sendEmailVerification(user);
         
         // Update lastVerified timestamp
-        await set(ref(db, `users/${uid}/lastVerified`), now);
+        if (refreshedUser.emailVerified) {
+          await set(ref(db, `users/${uid}/lastVerified`), now);
+        }
         
         alert("For security purposes, we've sent a new verification email to your inbox. Please verify to continue.");
         
