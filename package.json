@@ -15,6 +15,7 @@
     "minimist": "^1.2.8"
   },
   "dependencies": {
+    "@vercel/analytics": "^2.0.1",
     "ajv": "^8.18.0",
     "ajv-keywords": "^5.0.0",
     "firebase": "^12.9.0",
