@@ -154,7 +154,7 @@ export default function App() {
       console.log("User created in Auth:", user.uid);
 
       const code = generateVerificationCode();
-      const expiresAt = Date.now() + 5 * 60 * 1000;
+      const expiresAt = Date.now() + 1 * 60 * 1000;
 
       await set(ref(db, `users/${user.uid}`), {
         email: email,
@@ -280,7 +280,7 @@ export default function App() {
 
     try {
       const newCode = generateVerificationCode();
-      const expiresAt = Date.now() + 5 * 60 * 1000;
+      const expiresAt = Date.now() + 1 * 60 * 1000;
 
       await update(ref(db, `users/${pendingUser.uid}`), {
         verificationCode: newCode,
@@ -375,7 +375,7 @@ export default function App() {
         if (shouldResend) {
           console.log("Resending verification code...");
           const newCode = generateVerificationCode();
-          const expiresAt = Date.now() + 5 * 60 * 1000;
+          const expiresAt = Date.now() + 1 * 60 * 1000;
           
           await update(ref(db, `users/${userUid}`), {
             verificationCode: newCode,
