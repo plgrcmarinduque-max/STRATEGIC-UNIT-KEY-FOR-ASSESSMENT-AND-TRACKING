@@ -646,43 +646,46 @@ if (attachmentsSnapshot.exists()) {
       const organizedRef = ref(db, `forwarded-assessments/${poUid}/${selectedYear}/${selectedAssessmentId}/${cleanName}`);
       await set(organizedRef, forwardData);
       
-      // ===== FIX: UPDATE the answers node with forwarded flags instead of deleting =====
-      const updatedMetadata = {
-        ...metadata,
-        // Keep existing metadata
-        uid: metadata.uid || currentUserUid,
-        email: metadata.email || auth.currentUser?.email,
-        name: metadata.name || lgu.lguName,
-        municipality: metadata.municipality || lgu.municipality,
-        
-        // Add forwarding flags
-        forwarded: true,
-        forwardedToPO: true,
-        forwardedAt: Date.now(),
-        forwardedBy: auth.currentUser?.email,
-        forwardedByName: profileData.name || auth.currentUser?.email,
-        forwardedTo: poUid,
-        
-        // Ensure submitted is true
-        submitted: true,
-        
-        // Clear any return flags
-        returned: false,
-        returnedToMLGO: false,
-        returnedAt: null,
-        returnedBy: null,
-        returnedByName: null,
-        
-        // Preserve last saved info
-        lastSaved: Date.now()
-      };
+// ===== FIX: UPDATE the answers node with forwarded flags =====
+const updatedMetadata = {
+  ...metadata,
+  // Keep existing metadata
+  uid: metadata.uid || currentUserUid,
+  email: metadata.email || auth.currentUser?.email,
+  name: metadata.name || lgu.lguName,
+  municipality: metadata.municipality || lgu.municipality,
+  
+  // CRITICAL: Set status to "Forwarded" so dashboard filters it out
+  status: "Forwarded",  // <--- ADD THIS LINE
+  
+  // Add forwarding flags
+  forwarded: true,
+  forwardedToPO: true,
+  forwardedAt: Date.now(),
+  forwardedBy: auth.currentUser?.email,
+  forwardedByName: profileData.name || auth.currentUser?.email,
+  forwardedTo: poUid,
+  
+  // Ensure submitted is true
+  submitted: true,
+  
+  // Clear any return flags
+  returned: false,
+  returnedToMLGO: false,
+  returnedAt: null,
+  returnedBy: null,
+  returnedByName: null,
+  
+  // Preserve last saved info
+  lastSaved: Date.now()
+};
       
       const updatedData = {
         ...answersData,
         _metadata: updatedMetadata
       };
       
-      // Update the answers node with forwarded metadata (DO NOT DELETE)
+      // Update the answers node with forwarded metadata
       await set(answersRef, updatedData);
       console.log("✅ Updated answers node with forwarded metadata");
       
@@ -769,6 +772,8 @@ if (attachmentsSnapshot.exists()) {
   const [isReturnedToLGU, setIsReturnedToLGU] = useState(false);
 // In mlgo-view.jsx - Updated handleReturnToLGU function
 
+// In mlgo-view.jsx - Update the handleReturnToLGU function
+
 const handleReturnToLGU = async () => {
   if (!lguAnswers.length) {
     alert("No assessment data to return");
@@ -807,6 +812,9 @@ const handleReturnToLGU = async () => {
         name: currentData._metadata?.name,
         municipality: currentData._metadata?.municipality,
         
+        // IMPORTANT: Set status to "Draft" for dashboard display
+        status: "Draft",
+        
         // IMPORTANT: Set submitted to false to allow editing
         submitted: false,           // This is the key flag that LGU checks
         
@@ -838,6 +846,7 @@ const handleReturnToLGU = async () => {
       };
       
       console.log("📤 New metadata with MLGO remarks:", newMetadata);
+      console.log("📤 status set to:", newMetadata.status);
       console.log("📤 submitted flag set to:", newMetadata.submitted);
       
       const updatedData = {
@@ -846,7 +855,7 @@ const handleReturnToLGU = async () => {
       };
       
       await set(answersRef, updatedData);
-      console.log("✅ Assessment returned to LGU successfully");
+      console.log("✅ Assessment returned to LGU successfully with status: Draft");
       
       const lguUid = currentData._metadata?.uid;
       const municipality = profileData.municipality || location.state?.municipality;
@@ -903,6 +912,9 @@ const handleReturnToLGU = async () => {
     setLoading(false);
   }
 };
+
+
+
   useEffect(() => {
     if (!auth.currentUser) return;
 
@@ -2665,126 +2677,196 @@ useEffect(() => {
                                           </div>
                                         </div>
 
-                                        {/* Mode of Verification with Attachments */}
-                                        {main.verification && (
-                                          <div className="reference-verification-full" style={{ 
-                                            display: "flex",
-                                            flexDirection: "column",
-                                            width: "100%"
-                                          }}>
-                                            <div style={{ 
-                                              display: "flex", 
-                                              justifyContent: "space-between", 
-                                              alignItems: "center",
-                                              width: "100%",
-                                              gap: "10px"
-                                            }}>
-                                              <div style={{ display: "flex", alignItems: "center", gap: "5px", flexWrap: "wrap" }}>
-                                                <span className="reference-verification-label">Mode of Verification:</span>
-                                                <span className="reference-verification-value">{main.verification}</span>
-                                              </div>
-                                            </div>
-                                            
-{/* Attachments for this indicator */}
-{(() => {
-  const indicatorId = `${record.firebaseKey}_${index}_${main.title}`;
-  const indicatorAttachments = lgu.attachmentsByIndicator?.[indicatorId] || [];
+{/* Mode of Verification for main indicators */}
+{main.verification && (
+  <div className="reference-verification-full"
+  style={{
+    width:"100%"
+  }}>
   
-  return indicatorAttachments.length > 0 && (
-    <div style={{
+    <div className="reference-row" style={{
       display: "flex",
-      flexWrap: "wrap",
-      gap: "8px",
-      marginTop: "8px",
-      width: "100%"
+      border: "none",
     }}>
-      {indicatorAttachments.map((attachment, idx) => (
-        <div key={idx} style={{
-          display: "flex",
-          alignItems: "center",
+
+      <div className="reference-label" style={{
+        width: "46%",
+        background: "transparent",
+        borderRight: "1px solid rgba(8, 26, 75, 0.25)",
+        padding: "6px 12px",
+        border: "none",
+        display: "flex",
+        flexDirection: "column",
+        gap: "4px",
+        textAlign: "left",
+      }}>
+        <span style={{ display: "inline-block", flexShrink: 0, fontWeight: 700, color: "#081a4b"}}>Mode of Verification</span>
+        <div style={{ 
+          display: "flex", 
+          flexDirection: "column", 
           gap: "4px",
-          backgroundColor: "#e8f5e9",
-          padding: "4px 8px",
-          borderRadius: "16px",
-          fontSize: "11px",
-          border: "1px solid #c8e6c9",
-          maxWidth: "900px"
+          width: "100%"
         }}>
-          <span style={{ fontSize: "12px" }}>📎</span>
-          <span style={{ 
-            overflow: "hidden", 
-            textOverflow: "ellipsis",
-            whiteSpace: "nowrap",
-            color: "#0c1a4b",
-            flex: 1
-          }}>
-            {attachment.name || 'Attachment'}
-          </span>
-          
-          {/* Eye button for viewing */}
-{/* Eye button for viewing */}
-<button
-  onClick={() => viewAttachment(attachment)}
-  style={{
-    background: "none",
-    border: "none",
-    cursor: "pointer",
-    padding: "2px 4px",
-    fontSize: "14px",
-    color: "#0c1a4b",
-    display: "flex",
-    alignItems: "center",
-    borderRadius: "4px",
-    transition: "all 0.2s"
-  }}
-  onMouseOver={(e) => e.currentTarget.style.backgroundColor = "#8ebd98"}
-  onMouseOut={(e) => e.currentTarget.style.backgroundColor = "transparent"}
-  title="View attachment"
->
-  <svg
-    xmlns="http://www.w3.org/2000/svg"
-    width="16"
-    height="16"
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="2"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-  >
-    <path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"/>
-    <circle cx="12" cy="12" r="3"/>
-  </svg>
-</button>
-          
-{/* Download button */}
-<button
-  onClick={() => downloadAttachment(attachment)}
-  style={{
-    background: "none",
-    border: "none",
-    cursor: "pointer",
-    padding: "2px 4px",
-    fontSize: "16px",
-    color: "#0c1a4b",
-    display: "flex",
-    alignItems: "center",
-    borderRadius: "4px",
-    transition: "all 0.2s"
-  }}
-  onMouseOver={(e) => e.currentTarget.style.backgroundColor = "#8ebd98"}
-  onMouseOut={(e) => e.currentTarget.style.backgroundColor = "transparent"}
-  title="Download attachment"
->
-  <FiDownload/>
-</button>
+          {Array.isArray(main.verification) ? (
+            main.verification.map((v, idx) => (
+              <div key={idx} style={{ 
+                display: "flex", 
+                alignItems: "center", 
+                gap: "8px",
+                width: "100%"
+              }}>
+                <span style={{
+                  width: "6px",
+                  height: "6px",
+                  backgroundColor: "black",
+                  borderRadius: "50%",
+                  display: "inline-block",
+                  flexShrink: 0,
+                  marginLeft:"50px"
+                }}></span>
+                <span style={{ fontStyle: "italic", fontSize: "12px" }}>{v}</span>
+              </div>
+            ))
+          ) : (
+            <div style={{ 
+              display: "flex", 
+              alignItems: "center", 
+              gap: "8px",
+              width: "100%"
+            }}>
+              <span style={{
+                width: "6px",
+                height: "6px",
+                backgroundColor: "black",
+                borderRadius: "50%",
+                display: "inline-block",
+                flexShrink: 0,
+                marginLeft:"50px"
+              }}></span>
+              <span style={{ fontStyle: "italic", fontSize: "12px" }}>{main.verification}</span>
+            </div>
+          )}
         </div>
-      ))}
+      </div>
+      
+      <div className="reference-field" style={{
+        width: "55%",
+        padding: "6px 12px",
+        background: "#ffffff",
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "flex-end",
+        border:"none",
+        gap: "8px"
+      }}>
+        
+        {/* Attachments section - View Only */}
+        <div style={{
+          display: "flex",
+          flexDirection: "column",
+          gap: "6px",
+          width: "100%"
+        }}>
+          {(() => {
+            const indicatorId = `${record.firebaseKey}_${index}_${main.title}`;
+            const indicatorAttachments = lgu.attachmentsByIndicator?.[indicatorId] || [];
+            
+            return indicatorAttachments.length > 0 && (
+              <div style={{
+                display: "flex",
+                flexWrap: "wrap",
+                gap: "8px",
+                width: "100%"
+              }}>
+                {indicatorAttachments.map((attachment, idx) => (
+                  <div key={idx} style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "4px",
+                    backgroundColor: "#e8f5e9",
+                    padding: "4px 8px",
+                    borderRadius: "16px",
+                    fontSize: "11px",
+                    border: "1px solid #c8e6c9",
+                    maxWidth: "900px"
+                  }}>
+                    <span style={{ fontSize: "12px" }}>📎</span>
+                    <span style={{ 
+                      overflow: "hidden", 
+                      textOverflow: "ellipsis",
+                      whiteSpace: "nowrap",
+                      color: "#0c1a4b",
+                      flex: 1
+                    }}>
+                      {attachment.name || 'Attachment'}
+                    </span>
+                    
+                    {/* Eye button for viewing */}
+                    <button
+                      onClick={() => viewAttachment(attachment)}
+                      style={{
+                        background: "none",
+                        border: "none",
+                        cursor: "pointer",
+                        padding: "2px 4px",
+                        fontSize: "14px",
+                        color: "#0c1a4b",
+                        display: "flex",
+                        alignItems: "center",
+                        borderRadius: "4px",
+                        transition: "all 0.2s"
+                      }}
+                      onMouseOver={(e) => e.currentTarget.style.backgroundColor = "#8ebd98"}
+                      onMouseOut={(e) => e.currentTarget.style.backgroundColor = "transparent"}
+                      title="View attachment"
+                    >
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        width="16"
+                        height="16"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      >
+                        <path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"/>
+                        <circle cx="12" cy="12" r="3"/>
+                      </svg>
+                    </button>
+                    
+                    {/* Download button */}
+                    <button
+                      onClick={() => downloadAttachment(attachment)}
+                      style={{
+                        background: "none",
+                        border: "none",
+                        cursor: "pointer",
+                        padding: "2px 4px",
+                        fontSize: "16px",
+                        color: "#0c1a4b",
+                        display: "flex",
+                        alignItems: "center",
+                        borderRadius: "4px",
+                        transition: "all 0.2s"
+                      }}
+                      onMouseOver={(e) => e.currentTarget.style.backgroundColor = "#8ebd98"}
+                      onMouseOut={(e) => e.currentTarget.style.backgroundColor = "transparent"}
+                      title="Download attachment"
+                    >
+                      <FiDownload/>
+                    </button>
+                  </div>
+                ))}
+              </div>
+            );
+          })()}
+        </div>
+      </div>
     </div>
-  );
-})()}
-                                          </div>
-                                        )}
+  </div>
+)}
                                       </div>
                                     );
                                   })}
@@ -2860,118 +2942,196 @@ useEffect(() => {
                                           </div>
                                         </div>
 
-                                        {/* Mode of Verification for Sub Indicators */}
-                                        {sub.verification && (
-                                          <div className="reference-verification-full" style={{ 
-                                            display: "flex",
-                                            flexDirection: "column",
-                                            width: "100%",
-                                            marginTop: "5px"
-                                          }}>
-                                            <div style={{ display: "flex", alignItems: "center", gap: "5px", flexWrap: "wrap" }}>
-                                              <span className="reference-verification-label">Mode of Verification:</span>
-                                              <span className="reference-verification-value">{sub.verification}</span>
-                                            </div>
-                                            
-{/* Attachments for this sub indicator */}
-{(() => {
-  const indicatorId = `${record.firebaseKey}_sub_${index}_${sub.title}`;
-  const indicatorAttachments = lgu.attachmentsByIndicator?.[indicatorId] || [];
+{/* Mode of Verification for sub indicators */}
+{sub.verification && (
+  <div className="reference-verification-full"
+  style={{
+    width:"100%"
+  }}>
   
-  return indicatorAttachments.length > 0 && (
-    <div style={{
+    <div className="reference-row" style={{
       display: "flex",
-      flexWrap: "wrap",
-      gap: "8px",
-      marginTop: "8px",
-      width: "100%"
+      border: "none",
     }}>
-      {indicatorAttachments.map((attachment, idx) => (
-        <div key={idx} style={{
-          display: "flex",
-          alignItems: "center",
+
+      <div className="reference-label" style={{
+        width: "46%",
+        background: "transparent",
+        borderRight: "1px solid rgba(8, 26, 75, 0.25)",
+        padding: "6px 12px",
+        border: "none",
+        display: "flex",
+        flexDirection: "column",
+        gap: "4px",
+        textAlign: "left",
+      }}>
+        <span style={{ display: "inline-block", flexShrink: 0, fontWeight: 700, color: "#081a4b"}}>Mode of Verification</span>
+        <div style={{ 
+          display: "flex", 
+          flexDirection: "column", 
           gap: "4px",
-          backgroundColor: "#e8f5e9",
-          padding: "4px 8px",
-          borderRadius: "16px",
-          fontSize: "11px",
-          border: "1px solid #c8e6c9",
-          maxWidth: "900px"
+          width: "100%"
         }}>
-          <span style={{ fontSize: "12px" }}>📎</span>
-          <span style={{ 
-            overflow: "hidden", 
-            textOverflow: "ellipsis",
-            whiteSpace: "nowrap",
-            color: "#0c1a4b",
-            flex: 1
-          }}>
-            {attachment.name || 'Attachment'}
-          </span>
-          
-{/* Eye button for viewing */}
-<button
-  onClick={() => viewAttachment(attachment)}
-  style={{
-    background: "none",
-    border: "none",
-    cursor: "pointer",
-    padding: "2px 4px",
-    fontSize: "14px",
-    color: "#0c1a4b",
-    display: "flex",
-    alignItems: "center",
-    borderRadius: "4px",
-    transition: "all 0.2s"
-  }}
-  onMouseOver={(e) => e.currentTarget.style.backgroundColor = "#8ebd98"}
-  onMouseOut={(e) => e.currentTarget.style.backgroundColor = "transparent"}
-  title="View attachment"
->
-  <svg
-    xmlns="http://www.w3.org/2000/svg"
-    width="16"
-    height="16"
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="2"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-  >
-    <path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"/>
-    <circle cx="12" cy="12" r="3"/>
-  </svg>
-</button>
-          
-{/* Download button */}
-<button
-  onClick={() => downloadAttachment(attachment)}
-  style={{
-    background: "none",
-    border: "none",
-    cursor: "pointer",
-    padding: "2px 4px",
-    fontSize: "16px",
-    color: "#0c1a4b",
-    display: "flex",
-    alignItems: "center",
-    borderRadius: "4px",
-    transition: "all 0.2s"
-  }}
-  onMouseOver={(e) => e.currentTarget.style.backgroundColor = "#8ebd98"}
-  onMouseOut={(e) => e.currentTarget.style.backgroundColor = "transparent"}
-  title="Download attachment"
->
-  <FiDownload/>
-</button>
+          {Array.isArray(sub.verification) ? (
+            sub.verification.map((v, idx) => (
+              <div key={idx} style={{ 
+                display: "flex", 
+                alignItems: "center", 
+                gap: "8px",
+                width: "100%"
+              }}>
+                <span style={{
+                  width: "6px",
+                  height: "6px",
+                  backgroundColor: "black",
+                  borderRadius: "50%",
+                  display: "inline-block",
+                  flexShrink: 0,
+                  marginLeft:"50px"
+                }}></span>
+                <span style={{ fontStyle: "italic", fontSize: "12px" }}>{v}</span>
+              </div>
+            ))
+          ) : (
+            <div style={{ 
+              display: "flex", 
+              alignItems: "center", 
+              gap: "8px",
+              width: "100%"
+            }}>
+              <span style={{
+                width: "6px",
+                height: "6px",
+                backgroundColor: "black",
+                borderRadius: "50%",
+                display: "inline-block",
+                flexShrink: 0,
+                marginLeft:"50px"
+              }}></span>
+              <span style={{ fontStyle: "italic", fontSize: "12px" }}>{sub.verification}</span>
+            </div>
+          )}
         </div>
-      ))}
+      </div>
+      
+      <div className="reference-field" style={{
+        width: "55%",
+        padding: "6px 12px",
+        background: "#ffffff",
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "flex-end",
+        border:"none",
+        gap: "8px"
+      }}>
+        
+        {/* Attachments section - View Only */}
+        <div style={{
+          display: "flex",
+          flexDirection: "column",
+          gap: "6px",
+          width: "100%"
+        }}>
+          {(() => {
+            const indicatorId = `${record.firebaseKey}_sub_${index}_${sub.title}`;
+            const indicatorAttachments = lgu.attachmentsByIndicator?.[indicatorId] || [];
+            
+            return indicatorAttachments.length > 0 && (
+              <div style={{
+                display: "flex",
+                flexWrap: "wrap",
+                gap: "8px",
+                width: "100%"
+              }}>
+                {indicatorAttachments.map((attachment, idx) => (
+                  <div key={idx} style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "4px",
+                    backgroundColor: "#e8f5e9",
+                    padding: "4px 8px",
+                    borderRadius: "16px",
+                    fontSize: "11px",
+                    border: "1px solid #c8e6c9",
+                    maxWidth: "900px"
+                  }}>
+                    <span style={{ fontSize: "12px" }}>📎</span>
+                    <span style={{ 
+                      overflow: "hidden", 
+                      textOverflow: "ellipsis",
+                      whiteSpace: "nowrap",
+                      color: "#0c1a4b",
+                      flex: 1
+                    }}>
+                      {attachment.name || 'Attachment'}
+                    </span>
+                    
+                    {/* Eye button for viewing */}
+                    <button
+                      onClick={() => viewAttachment(attachment)}
+                      style={{
+                        background: "none",
+                        border: "none",
+                        cursor: "pointer",
+                        padding: "2px 4px",
+                        fontSize: "14px",
+                        color: "#0c1a4b",
+                        display: "flex",
+                        alignItems: "center",
+                        borderRadius: "4px",
+                        transition: "all 0.2s"
+                      }}
+                      onMouseOver={(e) => e.currentTarget.style.backgroundColor = "#8ebd98"}
+                      onMouseOut={(e) => e.currentTarget.style.backgroundColor = "transparent"}
+                      title="View attachment"
+                    >
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        width="16"
+                        height="16"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      >
+                        <path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"/>
+                        <circle cx="12" cy="12" r="3"/>
+                      </svg>
+                    </button>
+                    
+                    {/* Download button */}
+                    <button
+                      onClick={() => downloadAttachment(attachment)}
+                      style={{
+                        background: "none",
+                        border: "none",
+                        cursor: "pointer",
+                        padding: "2px 4px",
+                        fontSize: "16px",
+                        color: "#0c1a4b",
+                        display: "flex",
+                        alignItems: "center",
+                        borderRadius: "4px",
+                        transition: "all 0.2s"
+                      }}
+                      onMouseOver={(e) => e.currentTarget.style.backgroundColor = "#8ebd98"}
+                      onMouseOut={(e) => e.currentTarget.style.backgroundColor = "transparent"}
+                      title="Download attachment"
+                    >
+                      <FiDownload/>
+                    </button>
+                  </div>
+                ))}
+              </div>
+            );
+          })()}
+        </div>
+      </div>
     </div>
-  );
-})()}
-                                          </div>
-                                        )}
+  </div>
+)}
 
                                         {/* Nested Sub-Indicators */}
                                         {sub.nestedSubIndicators && sub.nestedSubIndicators.length > 0 && (
@@ -3057,111 +3217,196 @@ useEffect(() => {
                                                     </div>
                                                   </div>
                                                   
-                                                  {/* Verification for nested sub-indicator */}
-                                                  {nested.verification && (
-                                                    <div className="nested-verification">
-                                                      <span className="verification-label">Mode of Verification:</span>
-                                                      <span className="verification-value">{nested.verification}</span>
-                                                      
-{/* Attachments for nested sub-indicator */}
-{(() => {
-  const nestedIndicatorId = `${record.firebaseKey}_sub_${index}_nested_${nestedIndex}_${nested.title}`;
-  const nestedAttachments = lgu.attachmentsByIndicator?.[nestedIndicatorId] || [];
+{/* Mode of Verification for nested indicators */}
+{nested.verification && (
+  <div className="reference-verification-full"
+  style={{
+    width:"100%"
+  }}>
   
-  return nestedAttachments.length > 0 && (
-    <div style={{
+    <div className="reference-row" style={{
       display: "flex",
-      flexWrap: "wrap",
-      gap: "8px",
-      marginTop: "8px",
-      width: "100%"
+      border: "none",
     }}>
-      {nestedAttachments.map((attachment, idx) => (
-        <div key={idx} style={{
-          display: "flex",
-          alignItems: "center",
+
+      <div className="reference-label" style={{
+        width: "46%",
+        background: "transparent",
+        borderRight: "1px solid rgba(8, 26, 75, 0.25)",
+        padding: "6px 12px",
+        border: "none",
+        display: "flex",
+        flexDirection: "column",
+        gap: "4px",
+        textAlign: "left",
+      }}>
+        <span style={{ display: "inline-block", flexShrink: 0, fontWeight: 700, color: "#081a4b"}}>Mode of Verification</span>
+        <div style={{ 
+          display: "flex", 
+          flexDirection: "column", 
           gap: "4px",
-          backgroundColor: "#e8f5e9",
-          padding: "4px 8px",
-          borderRadius: "16px",
-          fontSize: "11px",
-          border: "1px solid #c8e6c9",
-          maxWidth: "900px"
+          width: "100%"
         }}>
-          <span style={{ fontSize: "12px" }}>📎</span>
-          <span style={{ 
-            overflow: "hidden", 
-            textOverflow: "ellipsis",
-            whiteSpace: "nowrap",
-            color: "#0c1a4b",
-            flex: 1
-          }}>
-            {attachment.name || 'Attachment'}
-          </span>
-          
-{/* Eye button for viewing */}
-<button
-  onClick={() => viewAttachment(attachment)}
-  style={{
-    background: "none",
-    border: "none",
-    cursor: "pointer",
-    padding: "2px 4px",
-    fontSize: "14px",
-    color: "#0c1a4b",
-    display: "flex",
-    alignItems: "center",
-    borderRadius: "4px",
-    transition: "all 0.2s"
-  }}
-  onMouseOver={(e) => e.currentTarget.style.backgroundColor = "#8ebd98"}
-  onMouseOut={(e) => e.currentTarget.style.backgroundColor = "transparent"}
-  title="View attachment"
->
-  <svg
-    xmlns="http://www.w3.org/2000/svg"
-    width="16"
-    height="16"
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="2"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-  >
-    <path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"/>
-    <circle cx="12" cy="12" r="3"/>
-  </svg>
-</button>
-          
-{/* Download button */}
-<button
-  onClick={() => downloadAttachment(attachment)}
-  style={{
-    background: "none",
-    border: "none",
-    cursor: "pointer",
-    padding: "2px 4px",
-    fontSize: "16px",
-    color: "#0c1a4b",
-    display: "flex",
-    alignItems: "center",
-    borderRadius: "4px",
-    transition: "all 0.2s"
-  }}
-  onMouseOver={(e) => e.currentTarget.style.backgroundColor = "#8ebd98"}
-  onMouseOut={(e) => e.currentTarget.style.backgroundColor = "transparent"}
-  title="Download attachment"
->
-  <FiDownload/>
-</button>
+          {Array.isArray(nested.verification) ? (
+            nested.verification.map((v, idx) => (
+              <div key={idx} style={{ 
+                display: "flex", 
+                alignItems: "center", 
+                gap: "8px",
+                width: "100%"
+              }}>
+                <span style={{
+                  width: "6px",
+                  height: "6px",
+                  backgroundColor: "black",
+                  borderRadius: "50%",
+                  display: "inline-block",
+                  flexShrink: 0,
+                  marginLeft:"50px"
+                }}></span>
+                <span style={{ fontStyle: "italic", fontSize: "12px" }}>{v}</span>
+              </div>
+            ))
+          ) : (
+            <div style={{ 
+              display: "flex", 
+              alignItems: "center", 
+              gap: "8px",
+              width: "100%"
+            }}>
+              <span style={{
+                width: "6px",
+                height: "6px",
+                backgroundColor: "black",
+                borderRadius: "50%",
+                display: "inline-block",
+                flexShrink: 0,
+                marginLeft:"50px"
+              }}></span>
+              <span style={{ fontStyle: "italic", fontSize: "12px" }}>{nested.verification}</span>
+            </div>
+          )}
         </div>
-      ))}
+      </div>
+      
+      <div className="reference-field" style={{
+        width: "55%",
+        padding: "6px 12px",
+        background: "#ffffff",
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "flex-end",
+        border:"none",
+        gap: "8px"
+      }}>
+        
+        {/* Attachments section - View Only */}
+        <div style={{
+          display: "flex",
+          flexDirection: "column",
+          gap: "6px",
+          width: "100%"
+        }}>
+          {(() => {
+            const nestedIndicatorId = `${record.firebaseKey}_sub_${index}_nested_${nestedIndex}_${nested.title}`;
+            const nestedAttachments = lgu.attachmentsByIndicator?.[nestedIndicatorId] || [];
+            
+            return nestedAttachments.length > 0 && (
+              <div style={{
+                display: "flex",
+                flexWrap: "wrap",
+                gap: "8px",
+                width: "100%"
+              }}>
+                {nestedAttachments.map((attachment, idx) => (
+                  <div key={idx} style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "4px",
+                    backgroundColor: "#e8f5e9",
+                    padding: "4px 8px",
+                    borderRadius: "16px",
+                    fontSize: "11px",
+                    border: "1px solid #c8e6c9",
+                    maxWidth: "900px"
+                  }}>
+                    <span style={{ fontSize: "12px" }}>📎</span>
+                    <span style={{ 
+                      overflow: "hidden", 
+                      textOverflow: "ellipsis",
+                      whiteSpace: "nowrap",
+                      color: "#0c1a4b",
+                      flex: 1
+                    }}>
+                      {attachment.name || 'Attachment'}
+                    </span>
+                    
+                    {/* Eye button for viewing */}
+                    <button
+                      onClick={() => viewAttachment(attachment)}
+                      style={{
+                        background: "none",
+                        border: "none",
+                        cursor: "pointer",
+                        padding: "2px 4px",
+                        fontSize: "14px",
+                        color: "#0c1a4b",
+                        display: "flex",
+                        alignItems: "center",
+                        borderRadius: "4px",
+                        transition: "all 0.2s"
+                      }}
+                      onMouseOver={(e) => e.currentTarget.style.backgroundColor = "#8ebd98"}
+                      onMouseOut={(e) => e.currentTarget.style.backgroundColor = "transparent"}
+                      title="View attachment"
+                    >
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        width="16"
+                        height="16"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      >
+                        <path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"/>
+                        <circle cx="12" cy="12" r="3"/>
+                      </svg>
+                    </button>
+                    
+                    {/* Download button */}
+                    <button
+                      onClick={() => downloadAttachment(attachment)}
+                      style={{
+                        background: "none",
+                        border: "none",
+                        cursor: "pointer",
+                        padding: "2px 4px",
+                        fontSize: "16px",
+                        color: "#0c1a4b",
+                        display: "flex",
+                        alignItems: "center",
+                        borderRadius: "4px",
+                        transition: "all 0.2s"
+                      }}
+                      onMouseOver={(e) => e.currentTarget.style.backgroundColor = "#8ebd98"}
+                      onMouseOut={(e) => e.currentTarget.style.backgroundColor = "transparent"}
+                      title="Download attachment"
+                    >
+                      <FiDownload/>
+                    </button>
+                  </div>
+                ))}
+              </div>
+            );
+          })()}
+        </div>
+      </div>
     </div>
-  );
-})()}
-                                                    </div>
-                                                  )}
+  </div>
+)}
                                                 </div>
                                               );
                                             })}

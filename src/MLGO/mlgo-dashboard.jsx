@@ -96,6 +96,7 @@ export default function MLGO() {
     return () => unsubscribe();
   }, [auth.currentUser?.uid]);
 
+  
 
   useEffect(() => {
     if (location.state?.refreshNeeded) {
@@ -335,11 +336,30 @@ useEffect(() => {
                 }
 
                 if (municipality === currentUserMunicipality) {
-                  // Determine status based on metadata flags
-                  let status = "Draft";
+                  // Check if forwarded FIRST - this should take precedence
+                  const isForwarded = lguData._metadata.forwarded === true || 
+                                     lguData._metadata.forwardedToPO === true ||
+                                     lguData._metadata.status === "Forwarded";
                   
+                  // Skip forwarded items entirely
+                  if (isForwarded) {
+                    console.log("Skipping forwarded item:", {
+                      year,
+                      assessment: lguData._metadata.assessment,
+                      municipality,
+                      status: lguData._metadata.status
+                    });
+                    return; // Skip this item
+                  }
+                  
+                  let status = "Draft";
+
+                  // First check if there's a status field in metadata
+                  if (lguData._metadata.status) {
+                    status = lguData._metadata.status;
+                  } 
                   // Check if returned from PO (using the flag)
-                  if (lguData._metadata.returnedToMLGO === true) {
+                  else if (lguData._metadata.returnedToMLGO === true) {
                     status = "Returned";
                   } 
                   // Check if submitted but not forwarded
@@ -347,46 +367,33 @@ useEffect(() => {
                     status = "Pending";
                   }
                   
-                  // Log forwarded items for debugging
-                  if (status === "Forwarded") {
-                    console.log("Found forwarded item:", {
-                      year,
-                      assessment: lguData._metadata.assessment,
-                      municipality,
-                      metadata: lguData._metadata
-                    });
-                  }
-                  
-                  // Skip forwarded items in the dashboard - they should not appear
-                  if (status !== "Forwarded") {
-                    submissionsList.push({
-                      id: counter++,
-                      year: year,
-                      assessmentId: lguData._metadata.assessmentId || "unknown",
-                      assessment: lguData._metadata.assessment || lguData._metadata.assessmentName || "General Assessment",
-                      status: status,
-                      submission: lguData._metadata.lastSaved 
-                        ? new Date(lguData._metadata.lastSaved).toLocaleDateString('en-US', {
-                            day: '2-digit',
-                            month: 'long',
-                            year: 'numeric'
-                          })
-                        : "N/A",
-                      deadline: lguData._metadata.deadline 
-                        ? new Date(lguData._metadata.deadline).toLocaleDateString('en-US', {
-                            day: '2-digit',
-                            month: 'long',
-                            year: 'numeric'
-                          })
-                        : "Not set",
-                      lguName: lguData._metadata.name || lguData._metadata.email || "Unknown",
-                      data: lguData,
-                      municipality: municipality,
-                      userUid: userUid,
-                      isVerified: false,
-                      displayName: lguData._metadata.displayName || `${municipality} - ${lguData._metadata.assessment || "General"}`
-                    });
-                  }
+                  submissionsList.push({
+                    id: counter++,
+                    year: year,
+                    assessmentId: lguData._metadata.assessmentId || "unknown",
+                    assessment: lguData._metadata.assessment || lguData._metadata.assessmentName || "General Assessment",
+                    status: status,
+                    submission: lguData._metadata.lastSaved 
+                      ? new Date(lguData._metadata.lastSaved).toLocaleDateString('en-US', {
+                          day: '2-digit',
+                          month: 'long',
+                          year: 'numeric'
+                        })
+                      : "N/A",
+                    deadline: lguData._metadata.deadline 
+                      ? new Date(lguData._metadata.deadline).toLocaleDateString('en-US', {
+                          day: '2-digit',
+                          month: 'long',
+                          year: 'numeric'
+                        })
+                      : "Not set",
+                    lguName: lguData._metadata.name || lguData._metadata.email || "Unknown",
+                    data: lguData,
+                    municipality: municipality,
+                    userUid: userUid,
+                    isVerified: false,
+                    displayName: lguData._metadata.displayName || `${municipality} - ${lguData._metadata.assessment || "General"}`
+                  });
                 }
               }
             });
@@ -431,25 +438,27 @@ useEffect(() => {
                   if (returnData.municipality === currentUserMunicipality) {
                     // Only add if not forwarded
                     if (returnData.status !== "Forwarded") {
-                      returnedList.push({
-                        id: counter++,
-                        year: year,
-                        assessmentId: returnData.assessmentId,
-                        assessment: returnData.assessment || "General Assessment",
-                        status: "Returned",
-                        submission: returnData.submission || "N/A",
-                        deadline: returnData.deadline || "Not set", // <-- USE THE VALUE FROM THE DATA
-                        lguName: returnData.originalLguName || returnData.lguName,
-                        data: returnData.originalData || {},
-                        municipality: returnData.municipality,
-                        userUid: returnData.lguUid,
-                        isVerified: false,
-                        isReturned: true,
-                        returnedBy: returnData.returnedBy,
-                        returnedAt: returnData.returnedAt,
-                        poRemarks: returnData.poRemarks,
-                        displayName: `${returnData.municipality} - ${returnData.assessment || "General"}`
-                      });
+// In the fetchReturnedSubmissions function, when pushing to returnedList:
+
+returnedList.push({
+  id: counter++,
+  year: year,
+  assessmentId: returnData.assessmentId,
+  assessment: returnData.assessment || "General Assessment",
+  status: "Returned", // Make sure status is set to Returned
+  submission: returnData.submission || "N/A",
+  deadline: returnData.deadline || "Not set",
+  lguName: returnData.originalLguName || returnData.lguName,
+  data: returnData.originalData || {},
+  municipality: returnData.municipality,
+  userUid: returnData.lguUid,
+  isVerified: false,
+  isReturned: true,
+  returnedBy: returnData.returnedBy,
+  returnedAt: returnData.returnedAt,
+  poRemarks: returnData.poRemarks,
+  displayName: `${returnData.municipality} - ${returnData.assessment || "General"}`
+});
                     }
                   }
                 });
@@ -479,60 +488,63 @@ const allSubmissions = useMemo(() => {
     returnedCount: returnedSubmissions.length
   });
   
-  // Filter out any items with "Forwarded" status from submissions
-  const nonForwardedSubmissions = submissions.filter(s => s.status !== "Forwarded");
+  // Helper function to check if an item is forwarded
+  const isForwarded = (item) => {
+    return item.status === "Forwarded" ||
+           item.data?._metadata?.forwarded === true ||
+           item.data?._metadata?.forwardedToPO === true ||
+           item.data?._metadata?.status === "Forwarded";
+  };
   
-  // Create a Set of verified item keys using year, assessmentId, and municipality
+  // Filter out forwarded items from all sources
+  const filteredSubmissions = submissions.filter(s => !isForwarded(s));
+  const filteredVerified = verifiedSubmissions.filter(v => !isForwarded(v));
+  const filteredReturned = returnedSubmissions.filter(r => !isForwarded(r));
+  
+  // Create a Set of verified item keys
   const verifiedKeys = new Set(
-    verifiedSubmissions
+    filteredVerified
       .filter(v => v.assessment && v.assessment !== "General Assessment")
       .map(v => `${v.year}-${v.assessmentId}-${v.municipality}`)
   );
   
   // Create a Set of returned item keys
   const returnedKeys = new Set(
-    returnedSubmissions
+    filteredReturned
       .filter(r => r.assessment && r.assessment !== "General Assessment")
       .map(r => `${r.year}-${r.assessmentId}-${r.municipality}`)
   );
   
   // Filter out pending items that have been verified or returned
-  const filteredPending = nonForwardedSubmissions.filter(pending => 
+  const filteredPending = filteredSubmissions.filter(pending => 
     !verifiedKeys.has(`${pending.year}-${pending.assessmentId}-${pending.municipality}`) &&
     !returnedKeys.has(`${pending.year}-${pending.assessmentId}-${pending.municipality}`)
   );
   
-  // Filter out any items with "General Assessment" that don't have real data
+  // Filter out any items with "General Assessment"
   const validPending = filteredPending.filter(p => 
-    p.assessment && p.assessment !== "General Assessment" && p.data && Object.keys(p.data).length > 0
+    p.assessment && p.assessment !== "General Assessment"
   );
   
-  const validVerified = verifiedSubmissions.filter(v => 
+  const validVerified = filteredVerified.filter(v => 
     v.assessment && v.assessment !== "General Assessment"
   );
   
-  const validReturned = returnedSubmissions.filter(r => 
+  const validReturned = filteredReturned.filter(r => 
     r.assessment && r.assessment !== "General Assessment"
   );
   
-  // Combine filtered pending with verified and returned
+  // Combine all
   const combined = [...validPending, ...validVerified, ...validReturned];
   
-  // Final filter to ensure no forwarded items sneak through
-  const finalFiltered = combined.filter(item => item.status !== "Forwarded");
+  // Final filter to ensure no forwarded items
+  const finalFiltered = combined.filter(item => !isForwarded(item));
   
-  console.log("Final filtered submissions:", finalFiltered.map(i => ({ 
-    year: i.year, 
-    assessment: i.assessment, 
-    status: i.status 
-  })));
+  console.log("Final filtered submissions:", finalFiltered.length);
   
-  // Sort by year descending (newest first) and then by timestamp
+  // Sort by year descending
   return finalFiltered.sort((a, b) => {
-    // First sort by year
     if (b.year !== a.year) return b.year - a.year;
-    
-    // Then by timestamp if available (returnedAt or verifiedAt)
     const timeA = a.returnedAt || a.verifiedAt || 0;
     const timeB = b.returnedAt || b.verifiedAt || 0;
     return timeB - timeA;

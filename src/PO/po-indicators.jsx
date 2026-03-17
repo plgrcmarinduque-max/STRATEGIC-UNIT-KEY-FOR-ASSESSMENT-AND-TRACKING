@@ -70,7 +70,7 @@ export default function POIndicators() {
       title: "",
       fieldType: "",
       choices: [],
-      verification: "",
+      verification: [],
     },
   ];
 
@@ -80,7 +80,7 @@ export default function POIndicators() {
       title: "",
       fieldType: "",
       choices: [],
-      verification: "",
+      verification: [],
       nestedSubIndicators: [],
     },
   ];
@@ -257,7 +257,7 @@ const saveSubmissionDeadline = async () => {
         title: "",
         fieldType: "",
         choices: [],
-        verification: "",
+        verification: [],
       },
     ]);
   };
@@ -277,7 +277,7 @@ const saveSubmissionDeadline = async () => {
                 title: "",
                 fieldType: "",
                 choices: [],
-                verification: "",
+                verification: [],
               },
             ],
           };
@@ -366,30 +366,190 @@ const saveSubmissionDeadline = async () => {
     );
   };
 
-  // Open modal to edit a specific record
-  const handleEditRecord = (record) => {
-    const mainIndicatorsCopy = record.mainIndicators ? 
-      record.mainIndicators.map(main => ({
-        ...main,
-        choices: main.choices ? [...main.choices] : []
-      })) : [];
-    
-    const subIndicatorsCopy = record.subIndicators ? 
-      record.subIndicators.map(sub => ({
-        ...sub,
-        choices: sub.choices ? [...sub.choices] : [],
-        nestedSubIndicators: sub.nestedSubIndicators ? 
-          sub.nestedSubIndicators.map(nested => ({
-            ...nested,
-            choices: nested.choices ? [...nested.choices] : []
-          })) : []
-      })) : [];
-
-    setMainIndicators(mainIndicatorsCopy);
-    setSubIndicators(subIndicatorsCopy);
-    setShowModal(true);
-    setEditRecordKey(record.firebaseKey);
+  // ===== VERIFICATION OPTIONS FUNCTIONS =====
+  
+  // Add verification option to main indicator
+  const addMainVerification = (mainId) => {
+    setMainIndicators((prev) =>
+      prev.map((main) => {
+        if (main.id === mainId) {
+          return {
+            ...main,
+            verification: [...(main.verification || []), ""]
+          };
+        }
+        return main;
+      })
+    );
   };
+
+  // Update verification option for main indicator
+  const updateMainVerification = (mainId, index, value) => {
+    setMainIndicators((prev) =>
+      prev.map((main) => {
+        if (main.id === mainId) {
+          const updatedVerification = [...(main.verification || [])];
+          updatedVerification[index] = value;
+          return { ...main, verification: updatedVerification };
+        }
+        return main;
+      })
+    );
+  };
+
+  // Remove verification option from main indicator
+  const removeMainVerification = (mainId, index) => {
+    setMainIndicators((prev) =>
+      prev.map((main) => {
+        if (main.id === mainId) {
+          const filtered = (main.verification || []).filter((_, i) => i !== index);
+          return { ...main, verification: filtered };
+        }
+        return main;
+      })
+    );
+  };
+
+  // Add verification option to sub indicator
+  const addSubVerification = (subId) => {
+    setSubIndicators((prev) =>
+      prev.map((sub) => {
+        if (sub.id === subId) {
+          return {
+            ...sub,
+            verification: [...(sub.verification || []), ""]
+          };
+        }
+        return sub;
+      })
+    );
+  };
+
+  // Update verification option for sub indicator
+  const updateSubVerification = (subId, index, value) => {
+    setSubIndicators((prev) =>
+      prev.map((sub) => {
+        if (sub.id === subId) {
+          const updatedVerification = [...(sub.verification || [])];
+          updatedVerification[index] = value;
+          return { ...sub, verification: updatedVerification };
+        }
+        return sub;
+      })
+    );
+  };
+
+  // Remove verification option from sub indicator
+  const removeSubVerification = (subId, index) => {
+    setSubIndicators((prev) =>
+      prev.map((sub) => {
+        if (sub.id === subId) {
+          const filtered = (sub.verification || []).filter((_, i) => i !== index);
+          return { ...sub, verification: filtered };
+        }
+        return sub;
+      })
+    );
+  };
+
+  // Add verification option to nested sub indicator
+  const addNestedVerification = (parentId, nestedId) => {
+    setSubIndicators((prev) =>
+      prev.map((sub) => {
+        if (sub.id === parentId) {
+          return {
+            ...sub,
+            nestedSubIndicators: (sub.nestedSubIndicators || []).map((nested) =>
+              nested.id === nestedId
+                ? { ...nested, verification: [...(nested.verification || []), ""] }
+                : nested
+            ),
+          };
+        }
+        return sub;
+      })
+    );
+  };
+
+  // Update verification option for nested sub indicator
+  const updateNestedVerification = (parentId, nestedId, index, value) => {
+    setSubIndicators((prev) =>
+      prev.map((sub) => {
+        if (sub.id === parentId) {
+          return {
+            ...sub,
+            nestedSubIndicators: (sub.nestedSubIndicators || []).map((nested) => {
+              if (nested.id === nestedId) {
+                const updatedVerification = [...(nested.verification || [])];
+                updatedVerification[index] = value;
+                return { ...nested, verification: updatedVerification };
+              }
+              return nested;
+            }),
+          };
+        }
+        return sub;
+      })
+    );
+  };
+
+  // Remove verification option from nested sub indicator
+  const removeNestedVerification = (parentId, nestedId, index) => {
+    setSubIndicators((prev) =>
+      prev.map((sub) => {
+        if (sub.id === parentId) {
+          return {
+            ...sub,
+            nestedSubIndicators: (sub.nestedSubIndicators || []).map((nested) => {
+              if (nested.id === nestedId) {
+                const filtered = (nested.verification || []).filter((_, i) => i !== index);
+                return { ...nested, verification: filtered };
+              }
+              return nested;
+            }),
+          };
+        }
+        return sub;
+      })
+    );
+  };
+
+// Open modal to edit a specific record
+const handleEditRecord = (record) => {
+  const mainIndicatorsCopy = record.mainIndicators ? 
+    record.mainIndicators.map(main => ({
+      ...main,
+      choices: main.choices ? [...main.choices] : [],
+      // Convert verification to array if it's a string
+      verification: main.verification 
+        ? (Array.isArray(main.verification) ? [...main.verification] : [main.verification])
+        : []
+    })) : [];
+  
+  const subIndicatorsCopy = record.subIndicators ? 
+    record.subIndicators.map(sub => ({
+      ...sub,
+      choices: sub.choices ? [...sub.choices] : [],
+      // Convert verification to array if it's a string
+      verification: sub.verification 
+        ? (Array.isArray(sub.verification) ? [...sub.verification] : [sub.verification])
+        : [],
+      nestedSubIndicators: sub.nestedSubIndicators ? 
+        sub.nestedSubIndicators.map(nested => ({
+          ...nested,
+          choices: nested.choices ? [...nested.choices] : [],
+          // Convert verification to array if it's a string
+          verification: nested.verification 
+            ? (Array.isArray(nested.verification) ? [...nested.verification] : [nested.verification])
+            : []
+        })) : []
+    })) : [];
+
+  setMainIndicators(mainIndicatorsCopy);
+  setSubIndicators(subIndicatorsCopy);
+  setShowModal(true);
+  setEditRecordKey(record.firebaseKey);
+};
 
   const handleDeleteRecord = async (firebaseKey) => {
     if (!auth.currentUser || !currentTab) return;
@@ -418,7 +578,7 @@ const saveSubmissionDeadline = async () => {
       title: main.title || "",
       fieldType: main.fieldType || "",
       choices: (main.choices || []).map(choice => choice || ""),
-      verification: main.verification || "",
+      verification: (main.verification || []).map(v => v || ""),
       ...(main.value !== undefined && { value: main.value })
     }));
   
@@ -427,13 +587,13 @@ const saveSubmissionDeadline = async () => {
       title: sub.title || "",
       fieldType: sub.fieldType || "",
       choices: (sub.choices || []).map(choice => choice || ""),
-      verification: sub.verification || "",
+      verification: (sub.verification || []).map(v => v || ""),
       nestedSubIndicators: (sub.nestedSubIndicators || []).map(nested => ({
         id: nested.id,
         title: nested.title || "",
         fieldType: nested.fieldType || "",
         choices: (nested.choices || []).map(choice => choice || ""),
-        verification: nested.verification || "",
+        verification: (nested.verification || []).map(v => v || ""),
         ...(nested.value !== undefined && { value: nested.value })
       })),
       ...(sub.value !== undefined && { value: sub.value })
@@ -535,36 +695,63 @@ const saveSubmissionDeadline = async () => {
     });
   }, []);
 
-  // Load data for current tab
-  useEffect(() => {
-    if (!auth.currentUser || !selectedYear || !selectedAssessmentId || !currentTab) return;
+// Load data for current tab
+useEffect(() => {
+  if (!auth.currentUser || !selectedYear || !selectedAssessmentId || !currentTab) return;
 
-    console.log("Loading data for tab:", currentTab.name, "ID:", currentTab.id);
+  console.log("Loading data for tab:", currentTab.name, "ID:", currentTab.id);
 
-    const dataRef = ref(
-      db,
-      `assessment-data/${auth.currentUser.uid}/${selectedYear}/${selectedAssessmentId}/${currentTab.tabPath}/assessment`
-    );
+  const dataRef = ref(
+    db,
+    `assessment-data/${auth.currentUser.uid}/${selectedYear}/${selectedAssessmentId}/${currentTab.tabPath}/assessment`
+  );
 
-    onValue(dataRef, (snapshot) => {
-      const records = [];
-      let counter = 1;
+  onValue(dataRef, (snapshot) => {
+    const records = [];
+    let counter = 1;
 
-      if (snapshot.exists()) {
-        snapshot.forEach((childSnapshot) => {
-          const record = childSnapshot.val();
-          records.push({
-            ...record,
-            id: counter++,
-            firebaseKey: childSnapshot.key,
-          });
+    if (snapshot.exists()) {
+      snapshot.forEach((childSnapshot) => {
+        const record = childSnapshot.val();
+        
+        // Convert string verification to array for backward compatibility
+        const convertedRecord = {
+          ...record,
+          mainIndicators: (record.mainIndicators || []).map(main => ({
+            ...main,
+            // Convert verification to array if it's a string
+            verification: main.verification 
+              ? (Array.isArray(main.verification) ? main.verification : [main.verification])
+              : []
+          })),
+          subIndicators: (record.subIndicators || []).map(sub => ({
+            ...sub,
+            // Convert verification to array if it's a string
+            verification: sub.verification 
+              ? (Array.isArray(sub.verification) ? sub.verification : [sub.verification])
+              : [],
+            nestedSubIndicators: (sub.nestedSubIndicators || []).map(nested => ({
+              ...nested,
+              // Convert verification to array if it's a string
+              verification: nested.verification 
+                ? (Array.isArray(nested.verification) ? nested.verification : [nested.verification])
+                : []
+            }))
+          }))
+        };
+        
+        records.push({
+          ...convertedRecord,
+          id: counter++,
+          firebaseKey: childSnapshot.key,
         });
-      }
+      });
+    }
 
-      setData(records);
-      console.log(`📊 Loaded ${records.length} indicators for ${currentTab.name}`);
-    });
-  }, [selectedYear, selectedAssessmentId, currentTab, auth.currentUser]);
+    setData(records);
+    console.log(`📊 Loaded ${records.length} indicators for ${currentTab.name}`);
+  });
+}, [selectedYear, selectedAssessmentId, currentTab, auth.currentUser]);
 
   // Load submission deadline for the selected year and assessment
 
@@ -613,7 +800,7 @@ const handleSaveChanges = async () => {
         title: main.title || "",
         fieldType: main.fieldType || "",
         choices: (main.choices || []).filter(choice => choice !== undefined).map(choice => choice || ""),
-        verification: main.verification || "",
+        verification: (main.verification || []).filter(v => v !== undefined).map(v => v || ""),
         // Only include value if it exists
         ...(main.value !== undefined && { value: main.value })
       }));
@@ -623,14 +810,14 @@ const handleSaveChanges = async () => {
         title: sub.title || "",
         fieldType: sub.fieldType || "",
         choices: (sub.choices || []).filter(choice => choice !== undefined).map(choice => choice || ""),
-        verification: sub.verification || "",
+        verification: (sub.verification || []).filter(v => v !== undefined).map(v => v || ""),
         // Clean nested sub-indicators
         nestedSubIndicators: (sub.nestedSubIndicators || []).map(nested => ({
           id: nested.id || 0,
           title: nested.title || "",
           fieldType: nested.fieldType || "",
           choices: (nested.choices || []).filter(choice => choice !== undefined).map(choice => choice || ""),
-          verification: nested.verification || "",
+          verification: (nested.verification || []).filter(v => v !== undefined).map(v => v || ""),
           ...(nested.value !== undefined && { value: nested.value })
         })),
         ...(sub.value !== undefined && { value: sub.value })
@@ -731,7 +918,7 @@ const handleSaveChanges = async () => {
         title: "",
         fieldType: "",
         choices: [],
-        verification: "",
+        verification: [],
         nestedSubIndicators: [],
       },
     ]);
@@ -1148,12 +1335,33 @@ const handleSaveChanges = async () => {
                         </div>
                       </div>
 
-                      {main.verification && (
-                        <div className="reference-verification-full">
-                          <span className="reference-verification-label">Mode of Verification:</span>
-                          <span className="reference-verification-value">{main.verification}</span>
-                        </div>
-                      )}
+                      {main.verification && main.verification.length > 0 && (
+  <div className="reference-verification-full">
+    <span className="reference-verification-label">Mode of Verification:</span>
+    <div className="verification-options" style={{ 
+      marginLeft: "20px",
+      marginTop: "5px"
+    }}>
+      {main.verification.map((v, idx) => (
+        <div key={idx} style={{ 
+          display: "flex", 
+          alignItems: "center", 
+          gap: "10px",
+          marginBottom: "4px"
+        }}>
+          <span style={{
+            width: "8px",
+            height: "8px",
+            backgroundColor: "black",
+            borderRadius: "50%",
+            display: "inline-block"
+          }}></span>
+          <span className="reference-verification-value">{v}</span>
+        </div>
+      ))}
+    </div>
+  </div>
+)}
                     </div>
                   ))}
 
@@ -1199,12 +1407,33 @@ const handleSaveChanges = async () => {
                         </div>
                       </div>
 
-                      {sub.verification && (
-                        <div className="reference-verification-full">
-                          <span className="reference-verification-label">Mode of Verification:</span>
-                          <span className="reference-verification-value">{sub.verification}</span>
-                        </div>
-                      )}
+                      {sub.verification && sub.verification.length > 0 && (
+  <div className="reference-verification-full">
+    <span className="reference-verification-label">Mode of Verification:</span>
+    <div className="verification-options" style={{ 
+      marginLeft: "20px",
+      marginTop: "5px"
+    }}>
+      {sub.verification.map((v, idx) => (
+        <div key={idx} style={{ 
+          display: "flex", 
+          alignItems: "center", 
+          gap: "10px",
+          marginBottom: "4px"
+        }}>
+          <span style={{
+            width: "8px",
+            height: "8px",
+            backgroundColor: "black",
+            borderRadius: "50%",
+            display: "inline-block"
+          }}></span>
+          <span className="reference-verification-value">{v}</span>
+        </div>
+      ))}
+    </div>
+  </div>
+)}
 
                       {/* Display nested sub-indicators */}
                       {sub.nestedSubIndicators && sub.nestedSubIndicators.length > 0 && (
@@ -1254,12 +1483,33 @@ const handleSaveChanges = async () => {
                                 </div>
                               </div>
                               
-                              {nested.verification && (
-                                <div className="nested-verification">
-                                  <span className="verification-label">Mode of Verification:</span>
-                                  <span className="verification-value">{nested.verification}</span>
-                                </div>
-                              )}
+                              {nested.verification && nested.verification.length > 0 && (
+  <div className="nested-verification">
+    <span className="verification-label" style={{textAlign: "left", display: "block" }}>Mode of Verification:</span>
+    <div className="verification-options" style={{ 
+      marginLeft: "20px",
+      marginTop: "5px"
+    }}>
+      {nested.verification.map((v, idx) => (
+        <div key={idx} style={{ 
+          display: "flex", 
+          alignItems: "center", 
+          gap: "10px",
+          marginBottom: "4px"
+        }}>
+          <span style={{
+            width: "8px",
+            height: "8px",
+            backgroundColor: "black",
+            borderRadius: "50%",
+            display: "inline-block"
+          }}></span>
+          <span className="verification-value">{v}</span>
+        </div>
+      ))}
+    </div>
+  </div>
+)}
                             </div>
                           ))}
                         </div>
@@ -1557,18 +1807,73 @@ const handleSaveChanges = async () => {
                             </div>
                           )}
 
+                          {/* Mode of Verification with styling copied from checkbox/multiple choice */}
                           <div className="mainverification-row">
                             <label className="mainverification-label">
                               Mode of Verification:
                             </label>
-                            <input
-                              type="text"
-                              className="mainverification-input"
-                              value={main.verification}
-                              onChange={(e) =>
-                                updateMainIndicator(main.id, "verification", e.target.value)
-                              }
-                            />
+                            <div className="multiple-wrapper"
+                              style={{
+                                marginTop:"-1%",
+                                outline:"none"
+                              }}>
+                              {(main.verification || []).map((v, index) => (
+                                <div key={index} className="choice-row"
+                                style={{
+                                marginBottom:"-2%"
+                                }}>
+                                  <span
+                                      style={{
+                                        width: "9px",
+                                        height: "9px",
+                                        backgroundColor: "black",
+                                        borderRadius: "50%",
+                                        display: "inline-block",
+                                      }}
+                                    ></span>
+                                  <input
+                                    type="text"
+                                    placeholder="Enter verification item"
+                                    value={v}
+                                    onChange={(e) =>
+                                      updateMainVerification(main.id, index, e.target.value)
+                                    }
+                                  />
+                                  <button
+                                    type="button"
+                                    className="remove-choice-btn"
+                                    onClick={() => removeMainVerification(main.id, index)}
+                                  >
+                                    ✕
+                                  </button>
+                                </div>
+                              ))}
+                              <button
+                                type="button"
+                                className="add-choice-btn"
+                                onClick={() => addMainVerification(main.id)}
+                                style={{
+                                marginBottom:"2%",
+                                border:"none"
+                                }}
+                              >
+                                <span className="verification-bullet" 
+                                  style={{
+                                    width: "9px",
+                                    height: "9px",
+                                    backgroundColor: "black",
+                                    borderRadius: "50%",
+                                    display: "inline-block",
+                                    marginTop:"15px"
+                                  }}
+                                ></span>
+                                <span
+                                style={{
+                                marginTop:"9px"
+                                }}
+                                >+ Add Item</span>
+                              </button>
+                            </div>
                           </div>
                         </div>
 
@@ -1719,20 +2024,74 @@ const handleSaveChanges = async () => {
                               />
                             </div>
                           )}
-
-                          <div className="verification-row">
-                            <label className="verification-label">
-                              Mode of Verification:
-                            </label>
-                            <input
-                              type="text"
-                              className="verification-input"
-                              value={sub.verification}
-                              onChange={(e) =>
-                                updateSubIndicator(sub.id, "verification", e.target.value)
-                              }
-                            />
-                          </div>
+          {/* Mode of Verification for sub-indicator - matching main indicator style */}
+          <div className="verification-row">
+            <label className="verification-label">
+              Mode of Verification:
+            </label>
+            <div className="multiple-wrapper"
+              style={{
+                marginTop:"-1%",
+                outline:"none"
+              }}>
+              {(sub.verification || []).map((v, index) => (
+                <div key={index} className="choice-row"
+                  style={{
+                    marginBottom:"-1.5%"
+                  }}>
+                  <span
+                    style={{
+                      width: "9px",
+                      height: "9px",
+                      backgroundColor: "black",
+                      borderRadius: "50%",
+                      display: "inline-block",
+                    }}
+                  ></span>
+                  <input
+                    type="text"
+                    placeholder="Enter verification item"
+                    value={v}
+                    onChange={(e) =>
+                      updateSubVerification(sub.id, index, e.target.value)
+                    }
+                  />
+                  <button
+                    type="button"
+                    className="remove-choice-btn"
+                    onClick={() => removeSubVerification(sub.id, index)}
+                  >
+                    ✕
+                  </button>
+                </div>
+              ))}
+              <button
+                type="button"
+                className="add-choice-btn"
+                onClick={() => addSubVerification(sub.id)}
+                style={{
+                  marginBottom:"1%",
+                  border:"none"
+                }}
+              >
+                <span 
+                  style={{
+                    width: "9px",
+                    height: "9px",
+                    backgroundColor: "black",
+                    borderRadius: "50%",
+                    display: "inline-block",
+                    marginTop:"8px"
+                  }}
+                ></span>
+                <span
+                  style={{
+                    marginTop:"5px"
+                  }}
+                >+ Add Item</span>
+              </button>
+            </div>
+          </div>
                           
 {/* Nested Sub-Indicators */}
 {sub.nestedSubIndicators && sub.nestedSubIndicators.length > 0 && (
@@ -1903,6 +2262,87 @@ const handleSaveChanges = async () => {
                 />
               </div>
             )}
+
+                      {/* Mode of Verification for nested sub-indicator - matching main indicator style */}
+                      <div style={{ 
+                        width: "105.7%", 
+                        maxWidth: "650px",
+                        marginTop: "-2.5px",
+                        outline:"none"
+                      }}>
+                        <div className="verification-row">
+                          <label className="verification-label">
+                            Mode of Verification:
+                          </label>
+                          <div className="multiple-wrapper"
+                            style={{
+                              marginTop:"-1%",
+                              outline:"none"
+                            }}>
+                            {(nested.verification || []).map((v, idx) => (
+                              <div key={idx} className="choice-row"
+                                style={{
+                                  marginBottom:"-.7%"
+                                }}>
+                                <span
+                                  style={{
+                                    width: "9px",
+                                    height: "9px",
+                                    backgroundColor: "black",
+                                    borderRadius: "50%",
+                                    display: "inline-block",
+                                  }}
+                                ></span>
+                                <input
+                                  type="text"
+                                  placeholder="Enter verification item"
+                                  value={v}
+                                  onChange={(e) =>
+                                    updateNestedVerification(sub.id, nested.id, idx, e.target.value)
+                                  }
+                                  style={{
+                                    background: "white",
+                                    border: "none",
+                                    width: "100%"
+                                  }}
+                                />
+                                <button
+                                  type="button"
+                                  className="remove-choice-btn"
+                                  onClick={() => removeNestedVerification(sub.id, nested.id, idx)}
+                                >
+                                  ✕
+                                </button>
+                              </div>
+                            ))}
+                            <button
+                              type="button"
+                              className="add-choice-btn"
+                              onClick={() => addNestedVerification(sub.id, nested.id)}
+                              style={{
+                                marginBottom:"1%",
+                                border:"none"
+                              }}
+                            >
+                              <span 
+                                style={{
+                                  width: "9px",
+                                  height: "9px",
+                                  backgroundColor: "black",
+                                  borderRadius: "50%",
+                                  display: "inline-block",
+                                  marginTop:"4px"
+                                }}
+                              ></span>
+                              <span
+                                style={{
+                                  marginTop:"4px"
+                                }}
+                              >+ Add Item</span>
+                            </button>
+                          </div>
+                        </div>
+                      </div>
           </div>
 
           <select
