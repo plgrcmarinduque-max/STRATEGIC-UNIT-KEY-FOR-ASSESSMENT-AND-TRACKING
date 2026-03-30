@@ -528,7 +528,7 @@ const handleSignOut = () => {
               <>
               <img src={dilgSeal} alt="DILG Seal" style={{ height: "50px", width: "auto" }} />
               <img src={dilgLogo} alt="DILG Logo" style={{ height: "50px", width: "auto" }} />
-              <h3 style={{textAlign: "center", lineHeight: "1.1", marginLeft: "-20%",}}>TRATEGIC UNIT KEY <br />FOR{" "} <span className="yellow">ASS</span><span className="cyan">ESS</span>
+              <h3 style={{textAlign: "center", lineHeight: "1.1", marginLeft: "-20%",}}>STRATEGIC UNIT KEY <br />FOR{" "} <span className="yellow">ASS</span><span className="cyan">ESS</span>
               <span className="red">MENT</span>  <span className="white">AND</span> TRACKING</h3>
               <div className="sidebar-divider"></div>
               </>
