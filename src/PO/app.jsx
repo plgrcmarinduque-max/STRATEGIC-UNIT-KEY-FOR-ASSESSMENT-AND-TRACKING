@@ -578,7 +578,7 @@ if (!userData.verifiedAt || userData.verifiedAt < oneMinuteAgo) {
         </div>
 
         <h1 className="title">
-        STRATEGIC UNIT UNIT KEY FOR {" "}<br />
+        STRATEGIC UNIT KEY <br />FOR {" "}
           <span className="highlight">
             ASS<span className="cyan">ESS</span>
             <span className="red">MENT</span> <span className="white">AND </span>
