@@ -113,7 +113,7 @@ export default function App() {
         to_name: email.split('@')[0],
         passcode: code,
         email: email,
-        from_name: "SUKAT: Strategic Key For Assessment and Tracking",
+        from_name: "SUKAT: Strategic Unit Key For Assessment and Tracking",
         from_email: "plgrcmarinduque@gmail.com",
         reply_to: "support@marinduque.gov.ph"
       };
@@ -578,7 +578,7 @@ if (!userData.verifiedAt || userData.verifiedAt < oneMinuteAgo) {
         </div>
 
         <h1 className="title">
-        STRATEGIC KEY FOR {" "}<br />
+        STRATEGIC UNIT UNIT KEY FOR {" "}<br />
           <span className="highlight">
             ASS<span className="cyan">ESS</span>
             <span className="red">MENT</span> <span className="white">AND </span>

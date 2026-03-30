@@ -295,6 +295,8 @@ export default function LGU() {
     });
   }, []);
 
+
+  
   // Load remarks from Firebase
   const loadRemarks = async () => {
     if (!auth.currentUser || !selectedYearDisplay) return;
@@ -314,6 +316,10 @@ export default function LGU() {
     } catch (error) {
       console.error("Error loading remarks:", error);
     }
+  };
+
+  const sanitizeKey = (key) => {
+    return key.replace(/[.#$\[\]/:]/g, '_');
   };
 
   // Fetch unread notifications count
@@ -1771,9 +1777,12 @@ useEffect(() => {
   const handleAnswerChange = (indicatorKey, mainIndex, field, value) => {
     if (hasSubmitted || metadata?.forwardedToPO) return;
     
+    // Sanitize the field name
+    const sanitizedField = sanitizeKey(field);
+    
     setUserAnswers(prev => ({
       ...prev,
-      [`${selectedAssessmentId}_${activeTab}_${indicatorKey}_${mainIndex}_${field}`]: {
+      [`${selectedAssessmentId}_${activeTab}_${indicatorKey}_${mainIndex}_${sanitizedField}`]: {
         assessmentId: selectedAssessmentId,
         tabId: activeTab,
         indicatorKey,
@@ -1787,10 +1796,13 @@ useEffect(() => {
 
   const handleRadioChange = (indicatorKey, mainIndex, field, value) => {
     if (hasSubmitted || metadata?.forwardedToPO) return;
-
+  
+    // Sanitize the field name
+    const sanitizedField = sanitizeKey(field);
+  
     setUserAnswers(prev => ({
       ...prev,
-      [`${selectedAssessmentId}_${activeTab}_${indicatorKey}_${mainIndex}_radio_${field}`]: {
+      [`${selectedAssessmentId}_${activeTab}_${indicatorKey}_${mainIndex}_radio_${sanitizedField}`]: {
         assessmentId: selectedAssessmentId,
         tabId: activeTab,
         indicatorKey,
@@ -1801,13 +1813,16 @@ useEffect(() => {
       }
     }));
   };
-
+  
   const handleCheckboxChange = (indicatorKey, mainIndex, field, checked) => {
     if (hasSubmitted || metadata?.forwardedToPO) return;
-
+  
+    // Sanitize the field name
+    const sanitizedField = sanitizeKey(field);
+  
     setUserAnswers(prev => ({
       ...prev,
-      [`${selectedAssessmentId}_${activeTab}_${indicatorKey}_${mainIndex}_checkbox_${field}`]: {
+      [`${selectedAssessmentId}_${activeTab}_${indicatorKey}_${mainIndex}_checkbox_${sanitizedField}`]: {
         assessmentId: selectedAssessmentId,
         tabId: activeTab,
         indicatorKey,
@@ -1996,7 +2011,6 @@ const handleSaveAnswers = async () => {
     // ... keep your existing export function
   };
 
-  // File upload handlers
   const handleFileUpload = async (indicatorKey, mainIndex, field, file) => {
     if (!file) return;
     
@@ -2005,18 +2019,35 @@ const handleSaveAnswers = async () => {
     try {
       const reader = new FileReader();
       reader.onloadend = () => {
+        const sanitizedField = sanitizeKey(field);
+        const sanitizedIndicatorKey = sanitizeKey(indicatorKey);
+        const sanitizedMainIndex = sanitizeKey(String(mainIndex));
+        
+        // Use activeTab directly - this should be the tab ID
+        const tabId = activeTab;
+        
+        console.log("=== UPLOADING ATTACHMENT ===");
+        console.log("activeTab (tab ID):", activeTab);
+        console.log("indicatorKey (record key):", indicatorKey);
+        console.log("mainIndex:", mainIndex);
+        console.log("field:", field);
+        
+        const uniqueKey = `${selectedAssessmentId}_${tabId}_${sanitizedIndicatorKey}_${sanitizedMainIndex}_${sanitizedField}_${Date.now()}`;
+        
+        console.log("Generated uniqueKey:", uniqueKey);
+        
         const attachmentData = {
           fileName: file.name,
           fileType: file.type,
           fileSize: file.size,
           fileData: reader.result,
           uploadedAt: Date.now(),
-          indicatorKey,
-          mainIndex,
-          field
+          indicatorKey: sanitizedIndicatorKey,
+          mainIndex: sanitizedMainIndex,
+          field: sanitizedField,
+          tabId: tabId,
+          assessmentId: selectedAssessmentId
         };
-        
-        const uniqueKey = `${selectedAssessmentId}_${activeTab}_${indicatorKey}_${mainIndex}_${field}_${Date.now()}`;
         
         setAttachments(prev => ({
           ...prev,
@@ -2061,10 +2092,20 @@ const handleSaveAnswers = async () => {
   const [lastSavedTabDraft, setLastSavedTabDraft] = useState({});
   const [activeTabDraft, setActiveTabDraft] = useState(null); 
   // Draft functions
-  const handleSaveDraft = () => {
+  const handleSaveDraft = async () => {
     if (!auth.currentUser || !selectedYearDisplay || !selectedAssessmentId) return;
     
+    setSavingAnswers(true);
+    
     try {
+      const userName = profileData.name || auth.currentUser.email || "Anonymous";
+      const cleanName = `${userName.replace(/[.#$\[\]]/g, '_')}_${selectedAssessmentId}`;
+      
+      const draftRef = ref(
+        db,
+        `drafts/${selectedYearDisplay}/LGU/${cleanName}`
+      );
+      
       const draftData = {
         answers: userAnswers,
         attachments: attachments,
@@ -2072,40 +2113,43 @@ const handleSaveAnswers = async () => {
         assessmentId: selectedAssessmentId,
         assessment: selectedAssessment,
         userId: auth.currentUser.uid,
-        userName: profileData.name || auth.currentUser.email || "Anonymous",
-        lastUpdated: Date.now()
+        userName: userName,
+        lastUpdated: Date.now(),
+        isDraft: true
       };
       
-      localStorage.setItem(
-        `draft_${auth.currentUser.uid}_${selectedYearDisplay}_${selectedAssessmentId}`,
-        JSON.stringify(draftData)
-      );
+      await set(draftRef, draftData);
       
       setIsDraft(true);
       setLastSavedDraft(new Date().toLocaleTimeString());
-      alert("Draft saved successfully!"); 
+      alert("Draft saved to database successfully!");
     } catch (error) {
       console.error("Error saving draft:", error);
-      alert("Failed to save draft");
+      alert("Failed to save draft: " + error.message);
+    } finally {
+      setSavingAnswers(false);
     }
   };
-
-  const loadDraft = () => {
+  
+  const loadDraft = async () => {
     if (!auth.currentUser || !selectedYearDisplay || !selectedAssessmentId) return;
     
     try {
-      const savedDraft = localStorage.getItem(
-        `draft_${auth.currentUser.uid}_${selectedYearDisplay}_${selectedAssessmentId}`
-      );
+      const userName = profileData.name || auth.currentUser.email || "Anonymous";
+      const cleanName = `${userName.replace(/[.#$\[\]]/g, '_')}_${selectedAssessmentId}`;
       
-      if (savedDraft) {
-        const draftData = JSON.parse(savedDraft);
+      const draftRef = ref(
+        db,
+        `drafts/${selectedYearDisplay}/LGU/${cleanName}`
+      );
+      const snapshot = await get(draftRef);
+      
+      if (snapshot.exists()) {
+        const draftData = snapshot.val();
         setUserAnswers(draftData.answers || {});
-        
         if (draftData.attachments) {
           setAttachments(draftData.attachments);
         }
-        
         setIsDraft(true);
         setLastSavedDraft(new Date(draftData.lastUpdated).toLocaleTimeString());
       } else {
@@ -2115,11 +2159,23 @@ const handleSaveAnswers = async () => {
       console.error("Error loading draft:", error);
     }
   };
-
-  const clearDraft = () => {
+  
+  const clearDraft = async () => {
     if (!auth.currentUser || !selectedYearDisplay || !selectedAssessmentId) return;
-    localStorage.removeItem(`draft_${auth.currentUser.uid}_${selectedYearDisplay}_${selectedAssessmentId}`);
-    setIsDraft(false);
+    
+    try {
+      const userName = profileData.name || auth.currentUser.email || "Anonymous";
+      const cleanName = `${userName.replace(/[.#$\[\]]/g, '_')}_${selectedAssessmentId}`;
+      
+      const draftRef = ref(
+        db,
+        `drafts/${selectedYearDisplay}/LGU/${cleanName}`
+      );
+      await set(draftRef, null);
+      setIsDraft(false);
+    } catch (error) {
+      console.error("Error clearing draft:", error);
+    }
   };
 
   const handleSignOut = () => {
@@ -2187,7 +2243,7 @@ const handleSaveAnswers = async () => {
               <>
                 <img src={dilgSeal} alt="DILG Seal" style={{ height: "50px", width: "auto" }} />
                 <img src={dilgLogo} alt="DILG Logo" style={{ height: "50px", width: "auto" }} />
-                <h3 style={{textAlign: "center", lineHeight: "1.1", marginLeft: "-20%",}}>STRATEGIC KEY FOR <span className="yellow">ASS</span><span className="cyan">ESS</span>
+                <h3 style={{textAlign: "center", lineHeight: "1.1", marginLeft: "-20%",}}>STRATEGIC UNIT KEY FOR <span className="yellow">ASS</span><span className="cyan">ESS</span>
                 <span className="red">MENT</span>  <span className="white">AND</span> TRACKING</h3>
                 <div className="sidebar-divider"></div>
               </>
@@ -2844,11 +2900,12 @@ const handleSaveAnswers = async () => {
           gap: "6px",
           width: "100%"
         }}>
-          {Object.entries(attachments)
-            .filter(([key, value]) => 
-              key.includes(`${selectedAssessmentId}_${activeTab}_${record.firebaseKey}_${index}_${main.title}`)
-            )
-            .map(([key, attachment]) => (
+{Object.entries(attachments)
+  .filter(([key, value]) => {
+    const sanitizedField = sanitizeKey(main.title);
+    return key.includes(`${selectedAssessmentId}_${activeTab}_${record.firebaseKey}_${index}_${sanitizedField}`);
+  })
+  .map(([key, attachment]) => (
               <div key={key} style={{
                 display: "flex",
                 alignItems: "center",
@@ -3182,11 +3239,12 @@ const handleSaveAnswers = async () => {
           gap: "6px",
           width: "100%"
         }}>
-          {Object.entries(attachments)
-            .filter(([key, value]) => 
-              key.includes(`${selectedAssessmentId}_${activeTab}_${record.firebaseKey}_sub_${index}_${sub.title}`)
-            )
-            .map(([key, attachment]) => (
+{Object.entries(attachments)
+  .filter(([key, value]) => {
+    const sanitizedField = sanitizeKey(sub.title);
+    return key.includes(`${selectedAssessmentId}_${activeTab}_${record.firebaseKey}_sub_${index}_${sanitizedField}`);
+  })
+  .map(([key, attachment]) => (
               <div key={key} style={{
                 display: "flex",
                 alignItems: "center",
@@ -3496,11 +3554,12 @@ const handleSaveAnswers = async () => {
           gap: "6px",
           width: "100%"
         }}>
-          {Object.entries(attachments)
-            .filter(([key, value]) => 
-              key.includes(`${selectedAssessmentId}_${activeTab}_${record.firebaseKey}_sub_${index}_nested_${nestedIndex}_${nested.title}`)
-            )
-            .map(([key, attachment]) => (
+{Object.entries(attachments)
+  .filter(([key, value]) => {
+    const sanitizedField = sanitizeKey(nested.title);
+    return key.includes(`${selectedAssessmentId}_${activeTab}_${record.firebaseKey}_sub_${index}_nested_${nestedIndex}_${sanitizedField}`);
+  })
+  .map(([key, attachment]) => (
               <div key={key} style={{
                 display: "flex",
                 alignItems: "center",

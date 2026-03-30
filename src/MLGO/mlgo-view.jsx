@@ -67,6 +67,11 @@ export default function MLGOView() {
     status: "",
   });
 
+// Helper function to sanitize field names (matching what LGU uses)
+const sanitizeKey = (key) => {
+  return key.replace(/[.#$\[\]/]/g, '_');
+};
+
   const [remarks, setRemarks] = useState({}); // object per tab for PO's remarks
   const [verifiedFlag, setVerifiedFlag] = useState({}); // object per tab
 
@@ -288,104 +293,89 @@ useEffect(() => {
           metadata: _metadata
         });
         
-        // Load attachments
-// Load attachments
-const attachmentsRef = ref(
-  db,
-  `attachments/${selectedYear}/LGU/${cleanName}`
-);
-const attachmentsSnapshot = await get(attachmentsRef);
-
-if (attachmentsSnapshot.exists()) {
-  const attachments = attachmentsSnapshot.val();
-  const attachmentsByIndicator = {};
-  
-  console.log("📎 All attachments from Firebase:", attachments);
-  
-  Object.keys(attachments).forEach(key => {
-    const attachment = attachments[key];
-    
-    console.log("📎 Processing attachment key:", key);
-    
-    // Parse the key to extract indicator information
-    // Key format: assessmentId_tabId_recordKey_mainIndex_field_timestamp
-    // Example: ASSESS123_tab1_record1_0_Main Indicator Title_1741684800000
-    
-    const keyParts = key.split('_');
-    
-    // Check if this is a sub-indicator attachment (contains 'sub')
-    if (key.includes('_sub_')) {
-      // Format: assessmentId_tabId_recordKey_sub_subIndex_field_timestamp
-      // Example: ASSESS123_tab1_record1_sub_0_Sub Indicator Title_1741684800000
-      
-      // Extract the relevant parts
-      const assessmentId = keyParts[0];
-      const tabId = keyParts[1];
-      const recordKey = keyParts[2];
-      
-      // Find where 'sub' appears
-      const subIndex = keyParts.indexOf('sub') + 1;
-      const subNumber = keyParts[subIndex];
-      
-      // The field title is everything between subNumber and the last part (timestamp)
-      // The last part is the timestamp
-      const titleParts = keyParts.slice(subIndex + 1, -1);
-      const title = titleParts.join('_');
-      
-      // Create indicator ID that matches what we use in rendering
-      const indicatorId = `${recordKey}_sub_${subNumber}_${title}`;
-      
-      console.log(`📎 Sub-indicator attachment for: ${indicatorId}`);
-      
-      if (!attachmentsByIndicator[indicatorId]) {
-        attachmentsByIndicator[indicatorId] = [];
-      }
-      
-      attachmentsByIndicator[indicatorId].push({
-        key: key,
-        name: attachment.fileName || attachment.name || 'Attachment',
-        url: attachment.url || attachment.fileData,
-        fileData: attachment.fileData || attachment.url,
-        fileSize: attachment.fileSize,
-        uploadedAt: attachment.uploadedAt
-      });
-    } else {
-      // Main indicator attachment
-      // Format: assessmentId_tabId_recordKey_mainIndex_field_timestamp
-      // Example: ASSESS123_tab1_record1_0_Main Indicator Title_1741684800000
-      
-      const assessmentId = keyParts[0];
-      const tabId = keyParts[1];
-      const recordKey = keyParts[2];
-      const mainIndex = keyParts[3];
-      
-      // The field title is everything between mainIndex and the last part (timestamp)
-      // The last part is the timestamp
-      const titleParts = keyParts.slice(4, -1);
-      const title = titleParts.join('_');
-      
-      // Create indicator ID that matches what we use in rendering
-      const indicatorId = `${recordKey}_${mainIndex}_${title}`;
-      
-      console.log(`📎 Main indicator attachment for: ${indicatorId}`);
-      
-      if (!attachmentsByIndicator[indicatorId]) {
-        attachmentsByIndicator[indicatorId] = [];
-      }
-      
-      attachmentsByIndicator[indicatorId].push({
-        key: key,
-        name: attachment.fileName || attachment.name || 'Attachment',
-        url: attachment.url || attachment.fileData,
-        fileData: attachment.fileData || attachment.url,
-        fileSize: attachment.fileSize,
-        uploadedAt: attachment.uploadedAt
-      });
-    }
-  });
-  
-  console.log("📎 Final attachmentsByIndicator:", attachmentsByIndicator);
-  lguData.attachmentsByIndicator = attachmentsByIndicator;
+        const attachmentsRef = ref(
+          db,
+          `attachments/${selectedYear}/LGU/${cleanName}`
+        );
+        const attachmentsSnapshot = await get(attachmentsRef);
+        
+        if (attachmentsSnapshot.exists()) {
+          const attachments = attachmentsSnapshot.val();
+          const attachmentsByIndicator = {};
+          
+          Object.keys(attachments).forEach(key => {
+            const attachment = attachments[key];
+            
+            // The key format: assessmentId_tabId_recordKey_mainIndex_field_timestamp
+            // Example: QoZgVw6AZXA9ZbmyXs_QokktmJcJB0u2FNuUB_1774511626348_0_Average local revenue growth_1234567890
+            
+            const keyParts = key.split('_');
+            
+            if (keyParts.length >= 5) {
+              // Get the tab ID (index 1)
+              const tabId = keyParts[1];
+              
+              // Get the record key (index 2)
+              const recordKey = keyParts[2];
+              
+              // Get the main index (index 3)
+              const mainIndex = keyParts[3];
+              
+              // Get the field name (remaining parts before timestamp)
+              let fieldParts = keyParts.slice(4);
+              // Remove timestamp at the end
+              if (fieldParts.length > 0 && !isNaN(parseInt(fieldParts[fieldParts.length - 1]))) {
+                fieldParts = fieldParts.slice(0, -1);
+              }
+              const fieldName = fieldParts.join('_');
+              
+              let indicatorId = '';
+              
+              // Check if this is a sub-indicator attachment
+              if (key.includes('_sub_')) {
+                const subIndex = keyParts.findIndex(part => part === 'sub');
+                if (subIndex !== -1) {
+                  const subNumber = keyParts[subIndex + 1];
+                  
+                  if (key.includes('_nested_')) {
+                    const nestedIndex = keyParts.findIndex(part => part === 'nested');
+                    if (nestedIndex !== -1) {
+                      const nestedNumber = keyParts[nestedIndex + 1];
+                      indicatorId = `${tabId}_${recordKey}_sub_${subNumber}_nested_${nestedNumber}_${fieldName}`;
+                    }
+                  } else {
+                    indicatorId = `${tabId}_${recordKey}_sub_${subNumber}_${fieldName}`;
+                  }
+                }
+              } 
+              // Main indicator
+              else {
+                indicatorId = `${tabId}_${recordKey}_${mainIndex}_${fieldName}`;
+              }
+              
+              console.log(`Mapping attachment: ${key} -> indicatorId: ${indicatorId}`);
+              
+              if (indicatorId) {
+                if (!attachmentsByIndicator[indicatorId]) {
+                  attachmentsByIndicator[indicatorId] = [];
+                }
+                
+                attachmentsByIndicator[indicatorId].push({
+                  key: key,
+                  name: attachment.fileName || attachment.name || 'Attachment',
+                  url: attachment.url || attachment.fileData,
+                  fileData: attachment.fileData || attachment.url,
+                  fileSize: attachment.fileSize,
+                  uploadedAt: attachment.uploadedAt
+                });
+              }
+            }
+          });
+          
+          lguData.attachmentsByIndicator = attachmentsByIndicator;
+          console.log("Attachments mapped with tab IDs:", Object.keys(attachmentsByIndicator));
+        }else {
+  console.log("📎 No attachments found for this assessment");
 }
         
       } else {
@@ -1863,7 +1853,9 @@ const exportAllTabsToPDF = async () => {
             }
           }
         }
-        
+        console.log("Sub indicator - record.firebaseKey:", record.firebaseKey);
+console.log("Sub indicator - constructed ID:", `${record.firebaseKey}_sub_${index}_${sub.title}`);
+console.log("Available attachment keys:", Object.keys(lgu.attachmentsByIndicator || {}));
         // Process standalone sub indicators
         if (record.subIndicators && Array.isArray(record.subIndicators)) {
           for (let j = 0; j < record.subIndicators.length; j++) {
@@ -2214,7 +2206,7 @@ useEffect(() => {
               <>
               <img src={dilgSeal} alt="DILG Seal" style={{ height: "50px", width: "auto" }} />
               <img src={dilgLogo} alt="DILG Logo" style={{ height: "50px", width: "auto" }} />
-              <h3 style={{textAlign: "center", lineHeight: "1.1", marginLeft: "-20%",}}>STRATEGIC KEY FOR <span className="yellow">ASS</span><span className="cyan">ESS</span>
+              <h3 style={{textAlign: "center", lineHeight: "1.1", marginLeft: "-20%",}}>STRATEGIC UNIT KEY FOR <span className="yellow">ASS</span><span className="cyan">ESS</span>
               <span className="red">MENT</span>  <span className="white">AND</span> TRACKING</h3>
               <div className="sidebar-divider"></div>
               </>
@@ -2605,835 +2597,739 @@ useEffect(() => {
                                 <div key={record.firebaseKey} className="reference-wrapper">
                                   
                                   {/* Main Indicators */}
-                                  {record.mainIndicators?.map((main, index) => {
-                                    const radioKey = getAnswerKey(record, index, main.title, false, null, "radio");
-                                    const baseKey = getAnswerKey(record, index, main.title);
-                                    const answer = lgu.data?.[radioKey] ?? lgu.data?.[baseKey];
-                                    
-                                    return (
-                                      <div key={index} className="reference-wrapper">
-                                        <div className="reference-row">
-                                          <div className="reference-label">
-                                            {main.title}
-                                          </div>
-
-                                          <div className="mainreference-field">
-                                            <div className="field-content">
-                                              
-                                              {main.fieldType === "multiple" &&
-                                                main.choices.map((choice, i) => (
-                                                  <div key={i}>
-                                                    <input 
-                                                      type="radio" 
-                                                      name={`${record.firebaseKey}_${index}_${main.title}`}
-                                                      checked={isRadioSelected(answer?.value, choice, i)}
-                                                      disabled 
-                                                    /> 
-                                                    <span>
-                                                      {choice && typeof choice === "object"
-                                                        ? (choice.label ?? choice.value ?? choice.name ?? choice.title ?? choice.text ?? "")
-                                                        : choice}
-                                                    </span>
-                                                  </div>
-                                                ))
-                                              }
-                                              
-                                              {main.fieldType === "checkbox" &&
-                                                main.choices.map((choice, i) => {
-                                                  const checkboxKey = getAnswerKey(record, index, `${main.title}_${i}`, false, null, "checkbox");
-                                                  const checkboxAnswer = lgu.data?.[checkboxKey];
-                                                  
-                                                  return (
-                                                    <div key={i}>
-                                                      <input 
-                                                        type="checkbox" 
-                                                        checked={checkboxAnswer?.value === true}
-                                                        disabled 
-                                                      /> 
-                                                      <span>
-                                                        {choice && typeof choice === "object"
-                                                          ? (choice.label ?? choice.value ?? choice.name ?? choice.title ?? choice.text ?? "")
-                                                          : choice}
-                                                      </span>
-                                                    </div>
-                                                  );
-                                                })
-                                              }
-                                              
-                                              {(main.fieldType === "short" || main.fieldType === "integer" || main.fieldType === "date") && (
-  <div>
-    {answer?.value ? (
-      <span>
-        {main.fieldType === "integer" 
-          ? new Intl.NumberFormat('en-US').format(parseFloat(answer.value))
-          : main.fieldType === "date" 
-            ? new Date(answer.value).toLocaleDateString("en-US", {
-                year: "numeric",
-                month: "long",
-                day: "numeric",
-              })
-            : answer.value
-        }
-      </span>
-    ) : (
-      <span style={{ fontStyle: "italic", color: "gray" }}>
-        No answer provided
-      </span>
-    )}
-  </div>
-)}
-                                            </div>
-                                          </div>
-                                        </div>
-
-{/* Mode of Verification for main indicators */}
-{main.verification && (
-  <div className="reference-verification-full"
-  style={{
-    width:"100%"
-  }}>
+{/* Main Indicators */}
+{record.mainIndicators?.map((main, index) => {
+  const radioKey = getAnswerKey(record, index, main.title, false, null, "radio");
+  const baseKey = getAnswerKey(record, index, main.title);
+  const answer = lgu.data?.[radioKey] ?? lgu.data?.[baseKey];
   
-    <div className="reference-row" style={{
-      display: "flex",
-      border: "none",
-    }}>
+  // Try both patterns - with and without tab ID
+  const indicatorIdWithTab = `${activeTab}_${record.firebaseKey}_${index}_${main.title}`;
+  const indicatorIdWithoutTab = `${record.firebaseKey}_${index}_${main.title}`;
+  const attachmentsByIndicator = lgu.attachmentsByIndicator || {};
+  
+  const indicatorAttachments = attachmentsByIndicator[indicatorIdWithTab] || 
+                              attachmentsByIndicator[indicatorIdWithoutTab] || [];
+  
+  return (
+    <div key={index} className="reference-wrapper">
+      <div className="reference-row">
+        <div className="reference-label">
+          {main.title}
+        </div>
 
-      <div className="reference-label" style={{
-        width: "46%",
-        background: "transparent",
-        borderRight: "1px solid rgba(8, 26, 75, 0.25)",
-        padding: "6px 12px",
-        border: "none",
-        display: "flex",
-        flexDirection: "column",
-        gap: "4px",
-        textAlign: "left",
-      }}>
-        <span style={{ display: "inline-block", flexShrink: 0, fontWeight: 700, color: "#081a4b"}}>Mode of Verification</span>
-        <div style={{ 
-          display: "flex", 
-          flexDirection: "column", 
-          gap: "4px",
-          width: "100%"
-        }}>
-          {Array.isArray(main.verification) ? (
-            main.verification.map((v, idx) => (
-              <div key={idx} style={{ 
-                display: "flex", 
-                alignItems: "center", 
-                gap: "8px",
+        <div className="mainreference-field">
+          <div className="field-content">
+            
+            {main.fieldType === "multiple" &&
+              main.choices.map((choice, i) => (
+                <div key={i}>
+                  <input 
+                    type="radio" 
+                    name={`${record.firebaseKey}_${index}_${main.title}`}
+                    checked={isRadioSelected(answer?.value, choice, i)}
+                    disabled 
+                  /> 
+                  <span>
+                    {choice && typeof choice === "object"
+                      ? (choice.label ?? choice.value ?? choice.name ?? choice.title ?? choice.text ?? "")
+                      : choice}
+                  </span>
+                </div>
+              ))
+            }
+            
+            {main.fieldType === "checkbox" &&
+              main.choices.map((choice, i) => {
+                const checkboxKey = getAnswerKey(record, index, `${main.title}_${i}`, false, null, "checkbox");
+                const checkboxAnswer = lgu.data?.[checkboxKey];
+                
+                return (
+                  <div key={i}>
+                    <input 
+                      type="checkbox" 
+                      checked={checkboxAnswer?.value === true}
+                      disabled 
+                    /> 
+                    <span>
+                      {choice && typeof choice === "object"
+                        ? (choice.label ?? choice.value ?? choice.name ?? choice.title ?? choice.text ?? "")
+                        : choice}
+                    </span>
+                  </div>
+                );
+              })
+            }
+            
+            {(main.fieldType === "short" || main.fieldType === "integer" || main.fieldType === "date") && (
+              <div>
+                {answer?.value ? (
+                  <span>
+                    {main.fieldType === "integer" 
+                      ? new Intl.NumberFormat('en-US').format(parseFloat(answer.value))
+                      : main.fieldType === "date" 
+                        ? new Date(answer.value).toLocaleDateString("en-US", {
+                            year: "numeric",
+                            month: "long",
+                            day: "numeric",
+                          })
+                        : answer.value
+                    }
+                  </span>
+                ) : (
+                  <span style={{ fontStyle: "italic", color: "gray" }}>
+                    No answer provided
+                  </span>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Mode of Verification for main indicators */}
+      {main.verification && (
+        <div className="reference-verification-full" style={{ width: "100%" }}>
+          <div className="reference-row" style={{ display: "flex", border: "none" }}>
+            <div className="reference-label" style={{
+              width: "46%",
+              background: "transparent",
+              borderRight: "1px solid rgba(8, 26, 75, 0.25)",
+              padding: "6px 12px",
+              border: "none",
+              display: "flex",
+              flexDirection: "column",
+              gap: "4px",
+              textAlign: "left",
+            }}>
+              <span style={{ display: "inline-block", flexShrink: 0, fontWeight: 700, color: "#081a4b" }}>Mode of Verification</span>
+              <div style={{ display: "flex", flexDirection: "column", gap: "4px", width: "100%" }}>
+                {Array.isArray(main.verification) ? (
+                  main.verification.map((v, idx) => (
+                    <div key={idx} style={{ display: "flex", alignItems: "center", gap: "8px", width: "100%" }}>
+                      <span style={{
+                        width: "6px",
+                        height: "6px",
+                        backgroundColor: "black",
+                        borderRadius: "50%",
+                        display: "inline-block",
+                        flexShrink: 0,
+                        marginLeft: "50px"
+                      }}></span>
+                      <span style={{ fontStyle: "italic", fontSize: "12px" }}>{v}</span>
+                    </div>
+                  ))
+                ) : (
+                  <div style={{ display: "flex", alignItems: "center", gap: "8px", width: "100%" }}>
+                    <span style={{
+                      width: "6px",
+                      height: "6px",
+                      backgroundColor: "black",
+                      borderRadius: "50%",
+                      display: "inline-block",
+                      flexShrink: 0,
+                      marginLeft: "50px"
+                    }}></span>
+                    <span style={{ fontStyle: "italic", fontSize: "12px" }}>{main.verification}</span>
+                  </div>
+                )}
+              </div>
+            </div>
+            
+            <div className="reference-field" style={{
+              width: "55%",
+              padding: "6px 12px",
+              background: "#ffffff",
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "flex-end",
+              border: "none",
+              gap: "8px"
+            }}>
+              <div style={{
+                display: "flex",
+                flexDirection: "column",
+                gap: "6px",
                 width: "100%"
               }}>
-                <span style={{
-                  width: "6px",
-                  height: "6px",
-                  backgroundColor: "black",
-                  borderRadius: "50%",
-                  display: "inline-block",
-                  flexShrink: 0,
-                  marginLeft:"50px"
-                }}></span>
-                <span style={{ fontStyle: "italic", fontSize: "12px" }}>{v}</span>
+                {indicatorAttachments.length > 0 && (
+                  <div style={{
+                    display: "flex",
+                    flexWrap: "wrap",
+                    gap: "8px",
+                    width: "100%"
+                  }}>
+                    {indicatorAttachments.map((attachment, idx) => (
+                      <div key={idx} style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "4px",
+                        backgroundColor: "#e8f5e9",
+                        padding: "4px 8px",
+                        borderRadius: "16px",
+                        fontSize: "11px",
+                        border: "1px solid #c8e6c9",
+                        maxWidth: "900px"
+                      }}>
+                        <span style={{ fontSize: "12px" }}>📎</span>
+                        <span style={{ 
+                          overflow: "hidden", 
+                          textOverflow: "ellipsis",
+                          whiteSpace: "nowrap",
+                          color: "#0c1a4b",
+                          flex: 1
+                        }}>
+                          {attachment.name || 'Attachment'}
+                        </span>
+                        
+                        <button
+                          onClick={() => viewAttachment(attachment)}
+                          style={{
+                            background: "none",
+                            border: "none",
+                            cursor: "pointer",
+                            padding: "2px 4px",
+                            fontSize: "14px",
+                            color: "#0c1a4b",
+                            display: "flex",
+                            alignItems: "center",
+                            borderRadius: "4px",
+                            transition: "all 0.2s"
+                          }}
+                          onMouseOver={(e) => e.currentTarget.style.backgroundColor = "#8ebd98"}
+                          onMouseOut={(e) => e.currentTarget.style.backgroundColor = "transparent"}
+                          title="View attachment"
+                        >
+                          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"/>
+                            <circle cx="12" cy="12" r="3"/>
+                          </svg>
+                        </button>
+                        
+                        <button
+                          onClick={() => downloadAttachment(attachment)}
+                          style={{
+                            background: "none",
+                            border: "none",
+                            cursor: "pointer",
+                            padding: "2px 4px",
+                            fontSize: "16px",
+                            color: "#0c1a4b",
+                            display: "flex",
+                            alignItems: "center",
+                            borderRadius: "4px",
+                            transition: "all 0.2s"
+                          }}
+                          onMouseOver={(e) => e.currentTarget.style.backgroundColor = "#8ebd98"}
+                          onMouseOut={(e) => e.currentTarget.style.backgroundColor = "transparent"}
+                          title="Download attachment"
+                        >
+                          <FiDownload />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+})}
+
+{/* Sub Indicators */}
+{record.subIndicators?.map((sub, index) => {
+  const radioKey = getAnswerKey(record, index, sub.title, true, null, "radio");
+  const baseKey = getAnswerKey(record, index, sub.title, true);
+  const answer = lgu.data?.[radioKey] ?? lgu.data?.[baseKey];
+  
+  // Try both patterns - with and without tab ID
+  const subPatternWithTab = `${activeTab}_${record.firebaseKey}_sub_${index}_`;
+  const subPatternWithoutTab = `${record.firebaseKey}_sub_${index}_`;
+  let subIndicatorAttachments = [];
+  const attachmentsByIndicator = lgu.attachmentsByIndicator || {};
+  
+  Object.keys(attachmentsByIndicator).forEach(key => {
+    if ((key.startsWith(subPatternWithTab) || key.startsWith(subPatternWithoutTab)) && !key.includes('_nested_')) {
+      subIndicatorAttachments = [...subIndicatorAttachments, ...attachmentsByIndicator[key]];
+    }
+  });
+  
+  return (
+    <div key={index} className="reference-wrapper">
+      <div className="reference-row sub-row">
+        <div className="reference-label">
+          {sub.title}
+        </div>
+
+        <div className="reference-field">
+          
+          {sub.fieldType === "multiple" &&
+            sub.choices.map((choice, i) => (
+              <div key={i}>
+                <input 
+                  type="radio" 
+                  name={`${record.firebaseKey}_sub_${index}_${sub.title}`}
+                  checked={isRadioSelected(answer?.value, choice, i)}
+                  disabled 
+                /> 
+                <span>
+                  {choice && typeof choice === "object"
+                    ? (choice.label ?? choice.value ?? choice.name ?? choice.title ?? choice.text ?? "")
+                    : choice}
+                </span>
               </div>
             ))
-          ) : (
-            <div style={{ 
-              display: "flex", 
-              alignItems: "center", 
-              gap: "8px",
-              width: "100%"
-            }}>
-              <span style={{
-                width: "6px",
-                height: "6px",
-                backgroundColor: "black",
-                borderRadius: "50%",
-                display: "inline-block",
-                flexShrink: 0,
-                marginLeft:"50px"
-              }}></span>
-              <span style={{ fontStyle: "italic", fontSize: "12px" }}>{main.verification}</span>
+          }
+          
+          {sub.fieldType === "checkbox" &&
+            sub.choices.map((choice, i) => {
+              const checkboxKey = getAnswerKey(record, index, `${sub.title}_${i}`, true, null, "checkbox");
+              const checkboxAnswer = lgu.data?.[checkboxKey];
+              
+              return (
+                <div key={i}>
+                  <input 
+                    type="checkbox" 
+                    checked={checkboxAnswer?.value === true}
+                    disabled 
+                  /> 
+                  <span>
+                    {choice && typeof choice === "object"
+                      ? (choice.label ?? choice.value ?? choice.name ?? choice.title ?? choice.text ?? "")
+                      : choice}
+                  </span>
+                </div>
+              );
+            })
+          }
+          
+          {(sub.fieldType === "short" || sub.fieldType === "integer" || sub.fieldType === "date") && (
+            <div>
+              {answer?.value ? (
+                <span>
+                  {sub.fieldType === "integer" 
+                    ? new Intl.NumberFormat('en-US').format(parseFloat(answer.value))
+                    : sub.fieldType === "date" 
+                      ? new Date(answer.value).toLocaleDateString("en-US", {
+                          year: "numeric",
+                          month: "long",
+                          day: "numeric",
+                        })
+                      : answer.value
+                  }
+                </span>
+              ) : (
+                <span style={{ fontStyle: "italic", color: "gray" }}>
+                  No answer provided
+                </span>
+              )}
             </div>
           )}
         </div>
       </div>
-      
-      <div className="reference-field" style={{
-        width: "55%",
-        padding: "6px 12px",
-        background: "#ffffff",
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "flex-end",
-        border:"none",
-        gap: "8px"
-      }}>
-        
-        {/* Attachments section - View Only */}
-        <div style={{
-          display: "flex",
-          flexDirection: "column",
-          gap: "6px",
-          width: "100%"
-        }}>
-          {(() => {
-            const indicatorId = `${record.firebaseKey}_${index}_${main.title}`;
-            const indicatorAttachments = lgu.attachmentsByIndicator?.[indicatorId] || [];
-            
-            return indicatorAttachments.length > 0 && (
-              <div style={{
-                display: "flex",
-                flexWrap: "wrap",
-                gap: "8px",
-                width: "100%"
-              }}>
-                {indicatorAttachments.map((attachment, idx) => (
-                  <div key={idx} style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "4px",
-                    backgroundColor: "#e8f5e9",
-                    padding: "4px 8px",
-                    borderRadius: "16px",
-                    fontSize: "11px",
-                    border: "1px solid #c8e6c9",
-                    maxWidth: "900px"
-                  }}>
-                    <span style={{ fontSize: "12px" }}>📎</span>
-                    <span style={{ 
-                      overflow: "hidden", 
-                      textOverflow: "ellipsis",
-                      whiteSpace: "nowrap",
-                      color: "#0c1a4b",
-                      flex: 1
-                    }}>
-                      {attachment.name || 'Attachment'}
-                    </span>
-                    
-                    {/* Eye button for viewing */}
-                    <button
-                      onClick={() => viewAttachment(attachment)}
-                      style={{
-                        background: "none",
-                        border: "none",
-                        cursor: "pointer",
-                        padding: "2px 4px",
-                        fontSize: "14px",
-                        color: "#0c1a4b",
-                        display: "flex",
-                        alignItems: "center",
-                        borderRadius: "4px",
-                        transition: "all 0.2s"
-                      }}
-                      onMouseOver={(e) => e.currentTarget.style.backgroundColor = "#8ebd98"}
-                      onMouseOut={(e) => e.currentTarget.style.backgroundColor = "transparent"}
-                      title="View attachment"
-                    >
-                      <svg
-                        xmlns="http://www.w3.org/2000/svg"
-                        width="16"
-                        height="16"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      >
-                        <path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"/>
-                        <circle cx="12" cy="12" r="3"/>
-                      </svg>
-                    </button>
-                    
-                    {/* Download button */}
-                    <button
-                      onClick={() => downloadAttachment(attachment)}
-                      style={{
-                        background: "none",
-                        border: "none",
-                        cursor: "pointer",
-                        padding: "2px 4px",
-                        fontSize: "16px",
-                        color: "#0c1a4b",
-                        display: "flex",
-                        alignItems: "center",
-                        borderRadius: "4px",
-                        transition: "all 0.2s"
-                      }}
-                      onMouseOver={(e) => e.currentTarget.style.backgroundColor = "#8ebd98"}
-                      onMouseOut={(e) => e.currentTarget.style.backgroundColor = "transparent"}
-                      title="Download attachment"
-                    >
-                      <FiDownload/>
-                    </button>
-                  </div>
-                ))}
-              </div>
-            );
-          })()}
-        </div>
-      </div>
-    </div>
-  </div>
-)}
-                                      </div>
-                                    );
-                                  })}
 
-                                  {/* Sub Indicators */}
-                                  {record.subIndicators?.map((sub, index) => {
-                                    const radioKey = getAnswerKey(record, index, sub.title, true, null, "radio");
-                                    const baseKey = getAnswerKey(record, index, sub.title, true);
-                                    const answer = lgu.data?.[radioKey] ?? lgu.data?.[baseKey];
-                                    
-                                    return (
-                                      <div key={index} className="reference-wrapper">
-                                        <div className="reference-row sub-row">
-                                          <div className="reference-label">
-                                            {sub.title}
-                                          </div>
-
-                                          <div className="reference-field">
-                                            
-                                            {sub.fieldType === "multiple" &&
-                                              sub.choices.map((choice, i) => (
-                                                <div key={i}>
-                                                  <input 
-                                                    type="radio" 
-                                                    name={`${record.firebaseKey}_sub_${index}_${sub.title}`}
-                                                    checked={isRadioSelected(answer?.value, choice, i)}
-                                                    disabled 
-                                                  /> 
-                                                  <span>
-                                                    {choice && typeof choice === "object"
-                                                      ? (choice.label ?? choice.value ?? choice.name ?? choice.title ?? choice.text ?? "")
-                                                      : choice}
-                                                  </span>
-                                                </div>
-                                              ))
-                                            }
-                                            
-                                            {sub.fieldType === "checkbox" &&
-                                              sub.choices.map((choice, i) => {
-                                                const checkboxKey = getAnswerKey(record, index, `${sub.title}_${i}`, true, null, "checkbox");
-                                                const checkboxAnswer = lgu.data?.[checkboxKey];
-                                                
-                                                return (
-                                                  <div key={i}>
-                                                    <input 
-                                                      type="checkbox" 
-                                                      checked={checkboxAnswer?.value === true}
-                                                      disabled 
-                                                    /> 
-                                                    <span>
-                                                      {choice && typeof choice === "object"
-                                                        ? (choice.label ?? choice.value ?? choice.name ?? choice.title ?? choice.text ?? "")
-                                                        : choice}
-                                                    </span>
-                                                  </div>
-                                                );
-                                              })
-                                            }
-                                            
-{(sub.fieldType === "short" || sub.fieldType === "integer" || sub.fieldType === "date") && (
-  <div>
-    {answer?.value ? (
-      <span>
-        {sub.fieldType === "integer" 
-          ? new Intl.NumberFormat('en-US').format(parseFloat(answer.value))
-          : sub.fieldType === "date" 
-            ? new Date(answer.value).toLocaleDateString("en-US", {
-                year: "numeric",
-                month: "long",
-                day: "numeric",
-              })
-            : answer.value
-        }
-      </span>
-    ) : (
-      <span style={{ fontStyle: "italic", color: "gray" }}>
-        No answer provided
-      </span>
-    )}
-  </div>
-)}
-                                          </div>
-                                        </div>
-
-{/* Mode of Verification for sub indicators */}
-{sub.verification && (
-  <div className="reference-verification-full"
-  style={{
-    width:"100%"
-  }}>
-  
-    <div className="reference-row" style={{
-      display: "flex",
-      border: "none",
-    }}>
-
-      <div className="reference-label" style={{
-        width: "46%",
-        background: "transparent",
-        borderRight: "1px solid rgba(8, 26, 75, 0.25)",
-        padding: "6px 12px",
-        border: "none",
-        display: "flex",
-        flexDirection: "column",
-        gap: "4px",
-        textAlign: "left",
-      }}>
-        <span style={{ display: "inline-block", flexShrink: 0, fontWeight: 700, color: "#081a4b"}}>Mode of Verification</span>
-        <div style={{ 
-          display: "flex", 
-          flexDirection: "column", 
-          gap: "4px",
-          width: "100%"
-        }}>
-          {Array.isArray(sub.verification) ? (
-            sub.verification.map((v, idx) => (
-              <div key={idx} style={{ 
-                display: "flex", 
-                alignItems: "center", 
-                gap: "8px",
-                width: "100%"
-              }}>
-                <span style={{
-                  width: "6px",
-                  height: "6px",
-                  backgroundColor: "black",
-                  borderRadius: "50%",
-                  display: "inline-block",
-                  flexShrink: 0,
-                  marginLeft:"50px"
-                }}></span>
-                <span style={{ fontStyle: "italic", fontSize: "12px" }}>{v}</span>
-              </div>
-            ))
-          ) : (
-            <div style={{ 
-              display: "flex", 
-              alignItems: "center", 
-              gap: "8px",
-              width: "100%"
+      {/* Mode of Verification for sub indicators - Now with attachments in the right column */}
+      {sub.verification && (
+        <div className="reference-verification-full" style={{ width: "100%" }}>
+          <div className="reference-row" style={{ display: "flex", border: "none" }}>
+            <div className="reference-label" style={{
+              width: "46%",
+              background: "transparent",
+              borderRight: "1px solid rgba(8, 26, 75, 0.25)",
+              padding: "6px 12px",
+              border: "none",
+              display: "flex",
+              flexDirection: "column",
+              gap: "4px",
+              textAlign: "left",
             }}>
-              <span style={{
-                width: "6px",
-                height: "6px",
-                backgroundColor: "black",
-                borderRadius: "50%",
-                display: "inline-block",
-                flexShrink: 0,
-                marginLeft:"50px"
-              }}></span>
-              <span style={{ fontStyle: "italic", fontSize: "12px" }}>{sub.verification}</span>
-            </div>
-          )}
-        </div>
-      </div>
-      
-      <div className="reference-field" style={{
-        width: "55%",
-        padding: "6px 12px",
-        background: "#ffffff",
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "flex-end",
-        border:"none",
-        gap: "8px"
-      }}>
-        
-        {/* Attachments section - View Only */}
-        <div style={{
-          display: "flex",
-          flexDirection: "column",
-          gap: "6px",
-          width: "100%"
-        }}>
-          {(() => {
-            const indicatorId = `${record.firebaseKey}_sub_${index}_${sub.title}`;
-            const indicatorAttachments = lgu.attachmentsByIndicator?.[indicatorId] || [];
-            
-            return indicatorAttachments.length > 0 && (
-              <div style={{
-                display: "flex",
-                flexWrap: "wrap",
-                gap: "8px",
-                width: "100%"
-              }}>
-                {indicatorAttachments.map((attachment, idx) => (
-                  <div key={idx} style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "4px",
-                    backgroundColor: "#e8f5e9",
-                    padding: "4px 8px",
-                    borderRadius: "16px",
-                    fontSize: "11px",
-                    border: "1px solid #c8e6c9",
-                    maxWidth: "900px"
-                  }}>
-                    <span style={{ fontSize: "12px" }}>📎</span>
-                    <span style={{ 
-                      overflow: "hidden", 
-                      textOverflow: "ellipsis",
-                      whiteSpace: "nowrap",
-                      color: "#0c1a4b",
-                      flex: 1
-                    }}>
-                      {attachment.name || 'Attachment'}
-                    </span>
-                    
-                    {/* Eye button for viewing */}
-                    <button
-                      onClick={() => viewAttachment(attachment)}
-                      style={{
-                        background: "none",
-                        border: "none",
-                        cursor: "pointer",
-                        padding: "2px 4px",
-                        fontSize: "14px",
-                        color: "#0c1a4b",
-                        display: "flex",
-                        alignItems: "center",
-                        borderRadius: "4px",
-                        transition: "all 0.2s"
-                      }}
-                      onMouseOver={(e) => e.currentTarget.style.backgroundColor = "#8ebd98"}
-                      onMouseOut={(e) => e.currentTarget.style.backgroundColor = "transparent"}
-                      title="View attachment"
-                    >
-                      <svg
-                        xmlns="http://www.w3.org/2000/svg"
-                        width="16"
-                        height="16"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      >
-                        <path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"/>
-                        <circle cx="12" cy="12" r="3"/>
-                      </svg>
-                    </button>
-                    
-                    {/* Download button */}
-                    <button
-                      onClick={() => downloadAttachment(attachment)}
-                      style={{
-                        background: "none",
-                        border: "none",
-                        cursor: "pointer",
-                        padding: "2px 4px",
-                        fontSize: "16px",
-                        color: "#0c1a4b",
-                        display: "flex",
-                        alignItems: "center",
-                        borderRadius: "4px",
-                        transition: "all 0.2s"
-                      }}
-                      onMouseOver={(e) => e.currentTarget.style.backgroundColor = "#8ebd98"}
-                      onMouseOut={(e) => e.currentTarget.style.backgroundColor = "transparent"}
-                      title="Download attachment"
-                    >
-                      <FiDownload/>
-                    </button>
+              <span style={{ display: "inline-block", flexShrink: 0, fontWeight: 700, color: "#081a4b" }}>Mode of Verification</span>
+              <div style={{ display: "flex", flexDirection: "column", gap: "4px", width: "100%" }}>
+                {Array.isArray(sub.verification) ? (
+                  sub.verification.map((v, idx) => (
+                    <div key={idx} style={{ display: "flex", alignItems: "center", gap: "8px", width: "100%" }}>
+                      <span style={{
+                        width: "6px",
+                        height: "6px",
+                        backgroundColor: "black",
+                        borderRadius: "50%",
+                        display: "inline-block",
+                        flexShrink: 0,
+                        marginLeft: "50px"
+                      }}></span>
+                      <span style={{ fontStyle: "italic", fontSize: "12px" }}>{v}</span>
+                    </div>
+                  ))
+                ) : (
+                  <div style={{ display: "flex", alignItems: "center", gap: "8px", width: "100%" }}>
+                    <span style={{
+                      width: "6px",
+                      height: "6px",
+                      backgroundColor: "black",
+                      borderRadius: "50%",
+                      display: "inline-block",
+                      flexShrink: 0,
+                      marginLeft: "50px"
+                    }}></span>
+                    <span style={{ fontStyle: "italic", fontSize: "12px" }}>{sub.verification}</span>
                   </div>
-                ))}
+                )}
               </div>
-            );
-          })()}
-        </div>
-      </div>
-    </div>
-  </div>
-)}
-
-                                        {/* Nested Sub-Indicators */}
-                                        {sub.nestedSubIndicators && sub.nestedSubIndicators.length > 0 && (
-                                          <div className="nested-reference-wrapper">
-                                            {sub.nestedSubIndicators.map((nested, nestedIndex) => {
-                                              const nestedRadioKey = getAnswerKey(record, index, nested.title, true, nestedIndex, "radio");
-                                              const baseNestedKey = getAnswerKey(record, index, nested.title, true, nestedIndex);
-                                              const nestedAnswer = lgu.data?.[nestedRadioKey] ?? lgu.data?.[baseNestedKey];
-                                              
-                                              return (
-                                                <div key={nested.id || nestedIndex} className="nested-reference-item">
-                                                  <div className="nested-reference-row">
-                                                    <div className="nested-reference-label">
-                                                      {nested.title || 'Untitled'}
-                                                    </div>
-                                                    <div className="nested-reference-field">
-                                                      
-                                                      {/* Multiple Choice */}
-                                                      {nested.fieldType === "multiple" && nested.choices?.map((choice, i) => (
-                                                        <div key={i}>
-                                                          <input 
-                                                            type="radio" 
-                                                            name={`${record.firebaseKey}_sub_${index}_nested_${nestedIndex}_${nested.title}`}
-                                                            checked={isRadioSelected(nestedAnswer?.value, choice, i)}
-                                                            disabled 
-                                                          /> 
-                                                          <span>
-                                                            {choice && typeof choice === "object"
-                                                              ? (choice.label ?? choice.value ?? choice.name ?? choice.title ?? choice.text ?? "")
-                                                              : choice}
-                                                          </span>
-                                                        </div>
-                                                      ))}
-
-                                                      {/* Checkbox */}
-                                                      {nested.fieldType === "checkbox" && nested.choices?.map((choice, i) => {
-                                                        const nestedCheckboxKey = getAnswerKey(record, index, `${nested.title}_${i}`, true, nestedIndex, "checkbox");
-                                                        const nestedCheckboxAnswer = lgu.data?.[nestedCheckboxKey];
-                                                        
-                                                        return (
-                                                          <div key={i}>
-                                                            <input 
-                                                              type="checkbox" 
-                                                              checked={nestedCheckboxAnswer?.value === true}
-                                                              disabled 
-                                                            /> 
-                                                            <span>
-                                                              {choice && typeof choice === "object"
-                                                                ? (choice.label ?? choice.value ?? choice.name ?? choice.title ?? choice.text ?? "")
-                                                                : choice}
-                                                            </span>
-                                                          </div>
-                                                        );
-                                                      })}
-
-{(nested.fieldType === "short" || nested.fieldType === "integer" || nested.fieldType === "date") && (
-  <div>
-    {nestedAnswer?.value ? (
-      <span>
-        {nested.fieldType === "integer" 
-          ? new Intl.NumberFormat('en-US').format(parseFloat(nestedAnswer.value))
-          : nested.fieldType === "date" 
-            ? new Date(nestedAnswer.value).toLocaleDateString("en-US", {
-                year: "numeric",
-                month: "long",
-                day: "numeric",
-              })
-            : nestedAnswer.value
-        }
-      </span>
-    ) : (
-      <span style={{ fontStyle: "italic", color: "gray" }}>
-        No answer provided
-      </span>
-    )}
-  </div>
-)}
-
-                                                      {!nested.fieldType && (
-                                                        <span style={{ fontStyle: "italic", color: "gray" }}>
-                                                          No field type selected
-                                                        </span>
-                                                      )}
-                                                    </div>
-                                                  </div>
-                                                  
-{/* Mode of Verification for nested indicators */}
-{nested.verification && (
-  <div className="reference-verification-full"
-  style={{
-    width:"100%"
-  }}>
-  
-    <div className="reference-row" style={{
-      display: "flex",
-      border: "none",
-    }}>
-
-      <div className="reference-label" style={{
-        width: "46%",
-        background: "transparent",
-        borderRight: "1px solid rgba(8, 26, 75, 0.25)",
-        padding: "6px 12px",
-        border: "none",
-        display: "flex",
-        flexDirection: "column",
-        gap: "4px",
-        textAlign: "left",
-      }}>
-        <span style={{ display: "inline-block", flexShrink: 0, fontWeight: 700, color: "#081a4b"}}>Mode of Verification</span>
-        <div style={{ 
-          display: "flex", 
-          flexDirection: "column", 
-          gap: "4px",
-          width: "100%"
-        }}>
-          {Array.isArray(nested.verification) ? (
-            nested.verification.map((v, idx) => (
-              <div key={idx} style={{ 
-                display: "flex", 
-                alignItems: "center", 
-                gap: "8px",
-                width: "100%"
-              }}>
-                <span style={{
-                  width: "6px",
-                  height: "6px",
-                  backgroundColor: "black",
-                  borderRadius: "50%",
-                  display: "inline-block",
-                  flexShrink: 0,
-                  marginLeft:"50px"
-                }}></span>
-                <span style={{ fontStyle: "italic", fontSize: "12px" }}>{v}</span>
-              </div>
-            ))
-          ) : (
-            <div style={{ 
-              display: "flex", 
-              alignItems: "center", 
-              gap: "8px",
-              width: "100%"
+            </div>
+            
+            <div className="reference-field" style={{
+              width: "55%",
+              padding: "6px 12px",
+              background: "#ffffff",
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "flex-end",
+              border: "none",
+              gap: "8px"
             }}>
-              <span style={{
-                width: "6px",
-                height: "6px",
-                backgroundColor: "black",
-                borderRadius: "50%",
-                display: "inline-block",
-                flexShrink: 0,
-                marginLeft:"50px"
-              }}></span>
-              <span style={{ fontStyle: "italic", fontSize: "12px" }}>{nested.verification}</span>
-            </div>
-          )}
-        </div>
-      </div>
-      
-      <div className="reference-field" style={{
-        width: "55%",
-        padding: "6px 12px",
-        background: "#ffffff",
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "flex-end",
-        border:"none",
-        gap: "8px"
-      }}>
-        
-        {/* Attachments section - View Only */}
-        <div style={{
-          display: "flex",
-          flexDirection: "column",
-          gap: "6px",
-          width: "100%"
-        }}>
-          {(() => {
-            const nestedIndicatorId = `${record.firebaseKey}_sub_${index}_nested_${nestedIndex}_${nested.title}`;
-            const nestedAttachments = lgu.attachmentsByIndicator?.[nestedIndicatorId] || [];
-            
-            return nestedAttachments.length > 0 && (
               <div style={{
                 display: "flex",
-                flexWrap: "wrap",
-                gap: "8px",
+                flexDirection: "column",
+                gap: "6px",
                 width: "100%"
               }}>
-                {nestedAttachments.map((attachment, idx) => (
-                  <div key={idx} style={{
+                {subIndicatorAttachments.length > 0 && (
+                  <div style={{
                     display: "flex",
-                    alignItems: "center",
-                    gap: "4px",
-                    backgroundColor: "#e8f5e9",
-                    padding: "4px 8px",
-                    borderRadius: "16px",
-                    fontSize: "11px",
-                    border: "1px solid #c8e6c9",
-                    maxWidth: "900px"
+                    flexWrap: "wrap",
+                    gap: "8px",
+                    width: "100%"
                   }}>
-                    <span style={{ fontSize: "12px" }}>📎</span>
-                    <span style={{ 
-                      overflow: "hidden", 
-                      textOverflow: "ellipsis",
-                      whiteSpace: "nowrap",
-                      color: "#0c1a4b",
-                      flex: 1
-                    }}>
-                      {attachment.name || 'Attachment'}
-                    </span>
-                    
-                    {/* Eye button for viewing */}
-                    <button
-                      onClick={() => viewAttachment(attachment)}
-                      style={{
-                        background: "none",
-                        border: "none",
-                        cursor: "pointer",
-                        padding: "2px 4px",
-                        fontSize: "14px",
-                        color: "#0c1a4b",
+                    {subIndicatorAttachments.map((attachment, idx) => (
+                      <div key={idx} style={{
                         display: "flex",
                         alignItems: "center",
-                        borderRadius: "4px",
-                        transition: "all 0.2s"
-                      }}
-                      onMouseOver={(e) => e.currentTarget.style.backgroundColor = "#8ebd98"}
-                      onMouseOut={(e) => e.currentTarget.style.backgroundColor = "transparent"}
-                      title="View attachment"
-                    >
-                      <svg
-                        xmlns="http://www.w3.org/2000/svg"
-                        width="16"
-                        height="16"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      >
-                        <path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"/>
-                        <circle cx="12" cy="12" r="3"/>
-                      </svg>
-                    </button>
-                    
-                    {/* Download button */}
-                    <button
-                      onClick={() => downloadAttachment(attachment)}
-                      style={{
-                        background: "none",
-                        border: "none",
-                        cursor: "pointer",
-                        padding: "2px 4px",
-                        fontSize: "16px",
-                        color: "#0c1a4b",
-                        display: "flex",
-                        alignItems: "center",
-                        borderRadius: "4px",
-                        transition: "all 0.2s"
-                      }}
-                      onMouseOver={(e) => e.currentTarget.style.backgroundColor = "#8ebd98"}
-                      onMouseOut={(e) => e.currentTarget.style.backgroundColor = "transparent"}
-                      title="Download attachment"
-                    >
-                      <FiDownload/>
-                    </button>
+                        gap: "4px",
+                        backgroundColor: "#e8f5e9",
+                        padding: "4px 8px",
+                        borderRadius: "16px",
+                        fontSize: "11px",
+                        border: "1px solid #c8e6c9",
+                        maxWidth: "900px"
+                      }}>
+                        <span style={{ fontSize: "12px" }}>📎</span>
+                        <span style={{ 
+                          overflow: "hidden", 
+                          textOverflow: "ellipsis",
+                          whiteSpace: "nowrap",
+                          color: "#0c1a4b",
+                          flex: 1
+                        }}>
+                          {attachment.name || 'Attachment'}
+                        </span>
+                        
+                        <button
+                          onClick={() => viewAttachment(attachment)}
+                          style={{
+                            background: "none",
+                            border: "none",
+                            cursor: "pointer",
+                            padding: "2px 4px",
+                            fontSize: "14px",
+                            color: "#0c1a4b",
+                            display: "flex",
+                            alignItems: "center",
+                            borderRadius: "4px",
+                            transition: "all 0.2s"
+                          }}
+                          onMouseOver={(e) => e.currentTarget.style.backgroundColor = "#8ebd98"}
+                          onMouseOut={(e) => e.currentTarget.style.backgroundColor = "transparent"}
+                          title="View attachment"
+                        >
+                          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"/>
+                            <circle cx="12" cy="12" r="3"/>
+                          </svg>
+                        </button>
+                        
+                        <button
+                          onClick={() => downloadAttachment(attachment)}
+                          style={{
+                            background: "none",
+                            border: "none",
+                            cursor: "pointer",
+                            padding: "2px 4px",
+                            fontSize: "16px",
+                            color: "#0c1a4b",
+                            display: "flex",
+                            alignItems: "center",
+                            borderRadius: "4px",
+                            transition: "all 0.2s"
+                          }}
+                          onMouseOver={(e) => e.currentTarget.style.backgroundColor = "#8ebd98"}
+                          onMouseOut={(e) => e.currentTarget.style.backgroundColor = "transparent"}
+                          title="Download attachment"
+                        >
+                          <FiDownload />
+                        </button>
+                      </div>
+                    ))}
                   </div>
-                ))}
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+{sub.nestedSubIndicators && sub.nestedSubIndicators.length > 0 && (
+  <div className="nested-reference-wrapper">
+    {sub.nestedSubIndicators.map((nested, nestedIndex) => {
+      const nestedRadioKey = getAnswerKey(record, index, nested.title, true, nestedIndex, "radio");
+      const baseNestedKey = getAnswerKey(record, index, nested.title, true, nestedIndex);
+      const nestedAnswer = lgu.data?.[nestedRadioKey] ?? lgu.data?.[baseNestedKey];
+      
+      // Try both patterns - with and without tab ID
+      const nestedPatternWithTab = `${activeTab}_${record.firebaseKey}_sub_${index}_nested_${nestedIndex}_`;
+      const nestedPatternWithoutTab = `${record.firebaseKey}_sub_${index}_nested_${nestedIndex}_`;
+      
+      let nestedAttachments = [];
+      const attachmentsByIndicator = lgu.attachmentsByIndicator || {};
+      
+      Object.keys(attachmentsByIndicator).forEach(key => {
+        if (key.includes(nestedPatternWithTab) || key.includes(nestedPatternWithoutTab)) {
+          nestedAttachments = [...nestedAttachments, ...attachmentsByIndicator[key]];
+        }
+      });
+      
+      return (
+              <div key={nested.id || nestedIndex} className="nested-reference-item">
+                <div className="nested-reference-row">
+                  <div className="nested-reference-label">
+                    {nested.title || 'Untitled'}
+                  </div>
+                  <div className="nested-reference-field">
+                    
+                    {nested.fieldType === "multiple" && nested.choices?.map((choice, i) => (
+                      <div key={i}>
+                        <input 
+                          type="radio" 
+                          name={`${record.firebaseKey}_sub_${index}_nested_${nestedIndex}_${nested.title}`}
+                          checked={isRadioSelected(nestedAnswer?.value, choice, i)}
+                          disabled 
+                        /> 
+                        <span>
+                          {choice && typeof choice === "object"
+                            ? (choice.label ?? choice.value ?? choice.name ?? choice.title ?? choice.text ?? "")
+                            : choice}
+                        </span>
+                      </div>
+                    ))}
+
+                    {nested.fieldType === "checkbox" && nested.choices?.map((choice, i) => {
+                      const nestedCheckboxKey = getAnswerKey(record, index, `${nested.title}_${i}`, true, nestedIndex, "checkbox");
+                      const nestedCheckboxAnswer = lgu.data?.[nestedCheckboxKey];
+                      
+                      return (
+                        <div key={i}>
+                          <input 
+                            type="checkbox" 
+                            checked={nestedCheckboxAnswer?.value === true}
+                            disabled 
+                          /> 
+                          <span>
+                            {choice && typeof choice === "object"
+                              ? (choice.label ?? choice.value ?? choice.name ?? choice.title ?? choice.text ?? "")
+                              : choice}
+                          </span>
+                        </div>
+                      );
+                    })}
+
+                    {(nested.fieldType === "short" || nested.fieldType === "integer" || nested.fieldType === "date") && (
+                      <div>
+                        {nestedAnswer?.value ? (
+                          <span>
+                            {nested.fieldType === "integer" 
+                              ? new Intl.NumberFormat('en-US').format(parseFloat(nestedAnswer.value))
+                              : nested.fieldType === "date" 
+                                ? new Date(nestedAnswer.value).toLocaleDateString("en-US", {
+                                    year: "numeric",
+                                    month: "long",
+                                    day: "numeric",
+                                  })
+                                : nestedAnswer.value
+                            }
+                          </span>
+                        ) : (
+                          <span style={{ fontStyle: "italic", color: "gray" }}>
+                            No answer provided
+                          </span>
+                        )}
+                      </div>
+                    )}
+
+                    {!nested.fieldType && (
+                      <span style={{ fontStyle: "italic", color: "gray" }}>
+                        No field type selected
+                      </span>
+                    )}
+                  </div>
+                </div>
+                
+                {nested.verification && (
+                  <div className="reference-verification-full" style={{ width: "100%" }}>
+                    <div className="reference-row" style={{ display: "flex", border: "none" }}>
+                      <div className="reference-label" style={{
+                        width: "46%",
+                        background: "transparent",
+                        borderRight: "1px solid rgba(8, 26, 75, 0.25)",
+                        padding: "6px 12px",
+                        border: "none",
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: "4px",
+                        textAlign: "left",
+                      }}>
+                        <span style={{ display: "inline-block", flexShrink: 0, fontWeight: 700, color: "#081a4b"}}>Mode of Verification</span>
+                        <div style={{ display: "flex", flexDirection: "column", gap: "4px", width: "100%" }}>
+                          {Array.isArray(nested.verification) ? (
+                            nested.verification.map((v, idx) => (
+                              <div key={idx} style={{ display: "flex", alignItems: "center", gap: "8px", width: "100%" }}>
+                                <span style={{
+                                  width: "6px",
+                                  height: "6px",
+                                  backgroundColor: "black",
+                                  borderRadius: "50%",
+                                  display: "inline-block",
+                                  flexShrink: 0,
+                                  marginLeft: "50px"
+                                }}></span>
+                                <span style={{ fontStyle: "italic", fontSize: "12px" }}>{v}</span>
+                              </div>
+                            ))
+                          ) : (
+                            <div style={{ display: "flex", alignItems: "center", gap: "8px", width: "100%" }}>
+                              <span style={{
+                                width: "6px",
+                                height: "6px",
+                                backgroundColor: "black",
+                                borderRadius: "50%",
+                                display: "inline-block",
+                                flexShrink: 0,
+                                marginLeft: "50px"
+                              }}></span>
+                              <span style={{ fontStyle: "italic", fontSize: "12px" }}>{nested.verification}</span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                      
+                      <div className="reference-field" style={{
+                        width: "55%",
+                        padding: "6px 12px",
+                        background: "#ffffff",
+                        display: "flex",
+                        flexDirection: "column",
+                        alignItems: "flex-end",
+                        border: "none",
+                        gap: "8px"
+                      }}>
+                        <div style={{
+                          display: "flex",
+                          flexDirection: "column",
+                          gap: "6px",
+                          width: "100%"
+                        }}>
+                          {nestedAttachments.length > 0 && (
+                            <div style={{
+                              display: "flex",
+                              flexWrap: "wrap",
+                              gap: "8px",
+                              width: "100%"
+                            }}>
+                              {nestedAttachments.map((attachment, idx) => (
+                                <div key={idx} style={{
+                                  display: "flex",
+                                  alignItems: "center",
+                                  gap: "4px",
+                                  backgroundColor: "#e8f5e9",
+                                  padding: "4px 8px",
+                                  borderRadius: "16px",
+                                  fontSize: "11px",
+                                  border: "1px solid #c8e6c9",
+                                  maxWidth: "900px"
+                                }}>
+                                  <span style={{ fontSize: "12px" }}>📎</span>
+                                  <span style={{ 
+                                    overflow: "hidden", 
+                                    textOverflow: "ellipsis",
+                                    whiteSpace: "nowrap",
+                                    color: "#0c1a4b",
+                                    flex: 1
+                                  }}>
+                                    {attachment.name || 'Attachment'}
+                                  </span>
+                                  
+                                  <button
+                                    onClick={() => viewAttachment(attachment)}
+                                    style={{
+                                      background: "none",
+                                      border: "none",
+                                      cursor: "pointer",
+                                      padding: "2px 4px",
+                                      fontSize: "14px",
+                                      color: "#0c1a4b",
+                                      display: "flex",
+                                      alignItems: "center",
+                                      borderRadius: "4px",
+                                      transition: "all 0.2s"
+                                    }}
+                                    onMouseOver={(e) => e.currentTarget.style.backgroundColor = "#8ebd98"}
+                                    onMouseOut={(e) => e.currentTarget.style.backgroundColor = "transparent"}
+                                    title="View attachment"
+                                  >
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                      <path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"/>
+                                      <circle cx="12" cy="12" r="3"/>
+                                    </svg>
+                                  </button>
+                                  
+                                  <button
+                                    onClick={() => downloadAttachment(attachment)}
+                                    style={{
+                                      background: "none",
+                                      border: "none",
+                                      cursor: "pointer",
+                                      padding: "2px 4px",
+                                      fontSize: "16px",
+                                      color: "#0c1a4b",
+                                      display: "flex",
+                                      alignItems: "center",
+                                      borderRadius: "4px",
+                                      transition: "all 0.2s"
+                                    }}
+                                    onMouseOver={(e) => e.currentTarget.style.backgroundColor = "#8ebd98"}
+                                    onMouseOut={(e) => e.currentTarget.style.backgroundColor = "transparent"}
+                                    title="Download attachment"
+                                  >
+                                    <FiDownload />
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             );
-          })()}
+          })}
         </div>
-      </div>
+      )}
     </div>
-  </div>
-)}
-                                                </div>
-                                              );
-                                            })}
-                                          </div>
-                                        )}
-                                      </div>
-                                    );
-                                  })}
+  );
+})}
                                 </div>
                               ))
                             ) : (
