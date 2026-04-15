@@ -1,0 +1,11 @@
+git clone -b master "https://github.com/Urinox/ONE-MARINDUQUE-TRACKING-SYSTEM"
+
+
+=========[HOW TO RUN LOCALLY]=========
+1. Open the Terminal
+2. Type "npm run dev"
+
+=========[HOW TO RUN IN GITHUB x VERCEL]=========
+1. Type git add .
+2. Type git commit -m "Update"
+3. Type git push -f origin main

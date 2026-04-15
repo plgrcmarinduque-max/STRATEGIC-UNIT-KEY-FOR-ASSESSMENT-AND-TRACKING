@@ -1,0 +1,498 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+}
+
+.app-container {
+  display: flex;
+  min-height: 100vh;
+  width: 100%;
+}
+
+/* Left Panel */
+.left-panel {
+  width: 40%;
+  background: #07124a;
+  color: #fff;
+  padding: 40px 60px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+    box-shadow: 15px 0 50px rgba(0, 0, 0, 0.6), /* main shadow */
+              -10px -10px 80px rgba(255, 255, 255, 0.1);
+              z-index: 1;
+}
+
+.logo-top {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin-left: -20px  ;
+  margin-top: -5%;
+  margin-bottom: -10px; /* normal spacing */
+}
+
+.top-logo {
+  width: 120px;
+  height: auto;
+}
+
+.title {
+  font-size: 26px;
+  font-weight: 700;
+  margin: 0 0 30px 0; /* remove margin-top */
+  text-align: center;
+  line-height: 1.4;
+}
+
+
+.cyan {
+  color: #ABBAFF; /* or #00ffff */
+}
+
+.red {
+  color: red; /* or #ff0000 */
+}
+
+.white {
+  color: #ffffff; /* or #ff0000 */
+}
+
+.highlight {
+  color: #f5c400;
+}
+
+.form-group {
+  margin-bottom: 15px;
+  display: flex;
+  flex-direction: column;
+}
+
+.form-group label {
+  font-size: 14px;
+  margin-bottom: 5px;
+  text-align: center;
+  margin-right: 85%; 
+  color: #ffffff;
+  font-weight: bold;
+  background-color: #990202;
+  padding: 5px 1px;
+  width: 17%;
+}
+
+
+.form-group input {
+  font-size: 15px;
+  padding: 9px;
+  border-radius: 6px;
+  border:#ffffff 2px solid;
+  outline: none;
+  background: #07124a;
+  color: #fff;
+  
+}
+
+
+.password-wrapper {
+  position: relative;
+}
+
+.password-wrapper input {
+  width: 100%;
+}
+
+.eye {
+  position: absolute;
+  right: 12px;
+  top: 5px;
+  cursor: pointer;
+  font-size: 170%;
+}
+
+/* Buttons */
+.login-btn {
+  font-size: 16px;
+  margin-top: 15px;
+  padding: 12px;
+  border-radius: 25px;
+  border: none;
+  background: #d9d9d9;
+  font-weight: bold;
+  cursor: pointer;
+  width: 100%;
+}
+
+.login-btn:hover{
+  background: #d9d9d98f;
+}
+
+.email-btn {
+  font-size: 16px;
+  margin-top: 15px;
+  padding: 12px;
+  border-radius: 25px;
+  border: none;
+  background: #f5c400;
+  font-weight: bold;
+  cursor: pointer;
+}
+.email-btn:hover{
+  background: #f5c40082;
+}
+
+.register-text {
+  margin-top: 20px;
+  font-size: 16px;
+}
+
+.register-text a {
+  color: #fff;
+  text-decoration: underline;
+}
+.register-text a :hover {
+  color: #605dff;
+  text-decoration: underline;
+}
+
+/* Right Panel */
+.right-panel {
+  flex: 1;
+  background: #f5c400;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px;
+}
+
+.seal {
+  width: 80%;
+  max-width: 550px;
+  height: auto;
+}
+
+.forgot-password {
+  text-align: right;
+
+}
+
+.forgot-password a {
+  color: #ffffff;
+  text-decoration: none;
+  font-size: 0.9rem;
+}
+
+.forgot-password a:hover {
+  text-decoration: underline;
+}
+
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0,0,0,0.5);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+  color: black;
+  text-align: center;
+  color: white;
+}
+
+.modal-content {
+  background: #07124a;
+  padding: 2rem;
+  border-radius: 12px;
+  width: 600px;
+  max-width: 90%;
+  box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+}
+
+.register-btn {
+  background-color: #d50303;
+  color: rgb(255, 255, 255);
+  padding: 0.5rem 1rem;
+  border: none;
+  margin-top: 1rem;
+  cursor: pointer;
+  border-radius: 6px;
+  font-weight: bold;
+  font-size: 16px;
+}
+.register-btn:hover {
+  background-color: #e1000087;
+  color: rgb(150, 150, 150);
+
+}
+
+.close-btn {
+  background-color: #f5c400;
+  color: black;
+  padding: 0.5rem 1rem;
+  border: none;
+  margin-left: 0.5rem;
+  cursor: pointer;
+  border-radius: 6px;
+  font-weight: bold;
+  font-size: 16px;
+}
+
+.close-btn:hover{
+  background-color: #f5c40089;
+}
+.register-form input{
+  font-size: 15x;
+  padding: 12px;
+  border-radius: 6px;
+  border:#ffffff 2px solid;
+  outline: none;
+  background: #07124a;
+  color: #fff;
+}
+
+
+.register-form {
+  margin-bottom: 20px;
+  display: flex;
+  flex-direction: column;
+}
+
+.register-form label {
+  font-size: 14px;
+  margin-bottom: 5px;
+  text-align: center;
+  margin-right: 85%; 
+  color: #ffffff;
+  font-weight: bold;
+  background-color: #990202;
+  padding: 5px 1px;
+}
+
+
+
+.email-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+}
+
+.email-modal-content {
+  background-color: white;
+  padding: 30px;
+  border-radius: 10px;
+  width: 90%;
+  max-width: 400px;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+}
+
+.email-modal-content h2 {
+  margin-bottom: 20px;
+  text-align: center;
+}
+
+.email-modal-content input[type="email"] {
+  width: 100%;
+  padding: 10px;
+  font-size: 16px;
+  border: 1px solid #cccccc;
+  border-radius: 5px;
+  margin-bottom: 20px;
+  box-sizing: border-box;
+}
+
+.email-modal-content .send-email-btn {
+  width: 100%;
+  padding: 12px;
+  font-size: 16px;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  background-color: #f44336;
+  color: white;
+  margin-bottom: 10px;
+}
+
+.email-modal-content .close-email-btn {
+  width: 100%;
+  padding: 12px;
+  font-size: 16px;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  background-color: #9e9e9e;
+  color: white;
+}
+
+.save-profile-btn:disabled {
+  background-color: #888 !important;
+  cursor: not-allowed;
+  color: #ccc !important;
+}
+
+.email-btn.disabled-btn {
+  opacity: 0.5;
+  cursor: not-allowed;
+  background-color: #cccccc;
+}
+
+.email-btn.disabled-btn:hover {
+  background-color: #cccccc;
+}
+
+
+.verify-form {
+  margin: 20px 0;
+}
+
+.verify-form label {
+  display: block;
+  margin-bottom: 8px;
+  color: #ffffff;
+  font-weight: 500;
+}
+
+.verify-form input {
+  width: 100%;
+  padding: 12px;
+  border: 2px solid #000000;
+  border-radius: 6px;
+  font-size: 20px;
+  text-align: center;
+  letter-spacing: 8px;
+  font-weight: 500;
+  color:#cc0a0a;
+}
+
+
+.verify-btn {
+  width: 100%;
+  padding: 10px;
+  background: #28a745;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-size: 16px;
+  font-weight: bold;
+  cursor: pointer;
+  margin-bottom: 10px;
+}
+
+.verify-btn:hover:not(:disabled) {
+  background: #218838;
+}
+
+.verify-btn:disabled {
+  background: #6c757d;
+  cursor: not-allowed;
+}
+
+.resend-section {
+  margin: 15px 0;
+  text-align: center;
+}
+
+.resend-btn {
+  background: none;
+  border: none;
+  color: #ffffff;
+  text-decoration: underline;
+  cursor: pointer;
+  font-size: 16px;
+}
+
+.resend-btn:hover{
+  color:rgba(187, 187, 255, 0.674);
+}
+
+/* Add to your app.css */
+.password-prompt-form {
+  margin: 20px 0;
+}
+
+.password-prompt-form label {
+  display: block;
+  margin-bottom: 8px;
+  font-weight: 500;
+  color: #ffffff;
+}
+
+.password-prompt-form .password-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.password-prompt-form input {
+  width: 100%;
+  padding: 12px;
+  padding-right: 40px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 14px;
+  transition: border-color 0.3s;
+}
+
+.password-prompt-form input:focus {
+  outline: none;
+  border-color: #007bff;
+  box-shadow: 0 0 0 2px rgba(0,123,255,0.25);
+}
+
+.password-prompt-form .eye {
+  position: absolute;
+  right: 12px;
+  background: none;
+  border: none;
+  font-size: 18px;
+  cursor: pointer;
+  color: #666;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.password-prompt-form .eye:hover {
+  color: #333;
+}
+
+@media (max-width: 1024px) {
+  .left-panel {
+    flex: 0 0 350px;
+    padding: 30px;
+  }
+}
+
+@media (max-width: 768px) {
+  .app-container {
+    flex-direction: column;
+  }
+
+  .left-panel {
+    flex: none;
+    width: 100%;
+    max-width: 100%;
+    box-shadow: none;
+  }
+
+  .right-panel {
+    width: 100%;
+    padding: 20px;
+  }
+
+  .seal {
+    width: 60%;
+  }
+}
+
