@@ -137,6 +137,66 @@ const decompressAnswers = (compressed) => {
   return decompressed;
 };
 
+// ===== REMARKS HELPER FUNCTIONS FOR DISPLAYING MLGO REMARKS =====
+const getIndicatorPath = (record, mainIndex, subIndex = null, nestedIndex = null) => {
+  let path = `${record.firebaseKey}`;
+  if (mainIndex !== undefined && mainIndex !== null) {
+    path += `_main_${mainIndex}`;
+  }
+  if (subIndex !== undefined && subIndex !== null) {
+    path += `_sub_${subIndex}`;
+  }
+  if (nestedIndex !== undefined && nestedIndex !== null) {
+    path += `_nested_${nestedIndex}`;
+  }
+  return path;
+};
+
+// Get MLGO remark for specific indicator
+const getMLGORemark = (indicatorPath) => {
+  // mlgoRemarks structure: { [tabId]: { [indicatorPath]: "remark" } }
+  const currentTabRemarks = mlgoRemarks[activeTab] || {};
+  return currentTabRemarks[indicatorPath] || "";
+};
+// Component to display MLGO remark (read-only)
+const MLGORemarkDisplay = ({ indicatorPath, indicatorTitle }) => {
+  const remark = getMLGORemark(indicatorPath);
+  
+  if (!remark || remark.trim() === "") {
+    return null;
+  }
+  
+  return (
+    <div style={{
+      marginTop: "8px",
+      padding: "6px 10px",
+      backgroundColor: "#fafafa",
+      borderRadius: "4px",
+      borderLeft: "3px solid #730101",
+      fontSize: "11px"
+    }}>
+      <div style={{ 
+        display: "flex", 
+        alignItems: "center", 
+        gap: "6px",
+        marginBottom: "4px",
+        fontWeight: "bold",
+        color: "#730101"
+      }}>
+        <span>📝</span>
+        <span>Remarks from MLGOO:</span>
+      </div>
+      <div style={{ 
+        fontStyle: "italic", 
+        color: "#555",
+        whiteSpace: "pre-wrap",
+        wordBreak: "break-word"
+      }}>
+        {remark}
+      </div>
+    </div>
+  );
+};
   const getVerificationArray = (verification) => {
     if (!verification) return [];
     if (Array.isArray(verification)) return verification;
@@ -2789,7 +2849,7 @@ const draftData = {
                 }}
               >
                 
-       {/* MLGO Remarks Section - Compact */}
+            {/* MLGO Remarks Section - Compact (General Remark Only) */}
 {hasSubmitted === false && (metadata?.returned || Object.keys(mlgoRemarks).length > 0) && (
   <div style={{
     backgroundColor: "#e9e9e9",
@@ -2797,32 +2857,20 @@ const draftData = {
     padding: "8px 12px",
     marginBottom: "15px",
     color: "#000000",
-    width: "100%",
-    display: "flex",
-    alignItems: "flex-start",
-    gap: "10px"
+    width: "100%"
   }}>
-    <span style={{ fontSize: "16px", flexShrink: 0 }}>📝</span>
-    <div style={{ flex: 1 }}>
-      <strong style={{ fontSize: "13px" }}>Remarks from MLGOO:</strong>
-      <div style={{ 
-        fontSize: "12px",
-        marginTop: "2px",
-        wordBreak: "break-word"
+    {/* General remark only (legacy) */}
+    {mlgoRemarks && typeof mlgoRemarks === 'object' && activeTab && mlgoRemarks[activeTab] && typeof mlgoRemarks[activeTab] === 'string' && (
+      <div style={{
+        padding: "6px 8px",
+        backgroundColor: "#fff3e0",
+        borderRadius: "4px",
+        borderLeft: "3px solid #ff9800"
       }}>
-        {mlgoRemarks && typeof mlgoRemarks === 'object' && activeTab ? (
-          mlgoRemarks[activeTab] ? (
-            mlgoRemarks[activeTab]
-          ) : (
-            <span style={{ fontStyle: "italic", color: "#999" }}>No specific remark for this tab</span>
-          )
-        ) : mlgoRemarks && typeof mlgoRemarks === 'string' ? (
-          mlgoRemarks
-        ) : (
-          <span style={{ fontStyle: "italic", color: "#999" }}>No specific remark for this tab</span>
-        )}
+        <strong style={{ fontSize: "12px" }}>📝 MLGO Remark:</strong>
+        <div style={{ fontSize: "12px", marginTop: "2px" }}>{mlgoRemarks[activeTab]}</div>
       </div>
-    </div>
+    )}
   </div>
 )}
 
@@ -2846,7 +2894,7 @@ const draftData = {
                       >
                         
                         {/* Main Indicators */}
-                        {record.mainIndicators?.map((main, index) => {
+              {record.mainIndicators?.map((main, index) => {
                       // Get the appropriate answer based on field type - USING FULL PATH
 let answer = null;
 const fullPath = `${record.firebaseKey}_${index}`;
@@ -3186,7 +3234,6 @@ const isChecked = userAnswers[checkboxKey]?.value === true;
         </div>
         
         <div style={{ display: "flex", gap: "4px", flexShrink: 0 }}>
-          {/* View Button */}
           <button
             onClick={() => viewAttachment(attachment)}
             style={{
@@ -3211,7 +3258,6 @@ const isChecked = userAnswers[checkboxKey]?.value === true;
             </svg>
           </button>
           
-          {/* Download Button */}
           <button
             onClick={() => downloadAttachment(attachment)}
             style={{
@@ -3237,7 +3283,6 @@ const isChecked = userAnswers[checkboxKey]?.value === true;
             </svg>
           </button>
           
-          {/* Remove Button (only if not submitted) */}
           {!hasSubmitted && (
             <button
               onClick={() => removeAttachment(key)}
@@ -3264,6 +3309,12 @@ const isChecked = userAnswers[checkboxKey]?.value === true;
                                   </div>
                                 </div>
                               )}
+                              
+                             {/* ===== DISPLAY MLGO REMARK IF EXISTS ===== */}
+<MLGORemarkDisplay
+  indicatorPath={`${record.firebaseKey}_main_${index}`}
+  indicatorTitle={main.title}
+/>
                             </div>
                           );
                         })}
@@ -3689,6 +3740,11 @@ onChange={(e) => {
                                 </div>
                               )}
 
+                              {/* ===== DISPLAY MLGO REMARK FOR SUB INDICATOR IF EXISTS ===== */}
+                              <MLGORemarkDisplay
+                                indicatorPath={`${record.firebaseKey}_sub_${index}`}
+                                indicatorTitle={sub.title}
+                              />
 
                               {/* Nested Sub-Indicators */}
                               {sub.nestedSubIndicators && sub.nestedSubIndicators.length > 0 && (
@@ -4102,6 +4158,11 @@ if (nested.fieldType === "multiple") {
   </div>
 </div>
                                         )}
+                                         {/* ===== DISPLAY MLGO REMARK FOR NESTED INDICATOR IF EXISTS ===== */}
+<MLGORemarkDisplay
+  indicatorPath={`${record.firebaseKey}_sub_${index}_nested_${nestedIndex}`}
+  indicatorTitle={nested.title}
+/>
                                       </div>
                                     );
                                   })}

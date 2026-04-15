@@ -74,6 +74,56 @@ const decompressAttachments = (compressed) => {
   
   return decompressed;
 };
+// ===== PO REMARKS DISPLAY COMPONENT =====
+const PORemarkDisplay = ({ indicatorPath, poRemarks }) => {
+  // poRemarks is already an object with indicatorPath as keys
+  const remark = poRemarks?.[indicatorPath] || "";
+  
+  if (!remark || remark.trim() === "") {
+    return null;
+  }
+  
+  return (
+    <div 
+      style={{
+        marginTop: "8px",
+        marginBottom: "8px",
+        padding: "6px 10px",
+        backgroundColor: "#e8f5e9",
+        borderRadius: "4px",
+        borderLeft: "3px solid #006736",
+        fontSize: "11px"
+      }}
+    >
+      <div 
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: "6px",
+          marginBottom: "4px",
+          fontWeight: "bold",
+          color: "#006736",
+          fontSize: "11px"
+        }}
+      >
+        <span>📝</span>
+        <span>Remarks from PO:</span>
+      </div>
+      <div
+        style={{
+          fontStyle: "italic",
+          color: "#333",
+          whiteSpace: "pre-wrap",
+          wordBreak: "break-word",
+          fontSize: "11px",
+          lineHeight: "1.4"
+        }}
+      >
+        {remark}
+      </div>
+    </div>
+  );
+};
 
 const getVerificationArray = (verification) => {
   if (!verification) return [];
@@ -92,7 +142,8 @@ const getVerificationArray = (verification) => {
 
 export default function MLGOView() {
   const location = useLocation(); 
-  const [lguRemarks, setLguRemarks] = useState({}); // object per tab for MLGO's remarks to LGU
+  const [lguRemarks, setLguRemarks] = useState({}); // Structure: { [tabId]: { [indicatorPath]: "remark" } }
+const [activeRemarks, setActiveRemarks] = useState({}); // For UI tracking which indicator is being edited
   const [isForwarded, setIsForwarded] = useState(false);
   const [isVerifiedView, setIsVerifiedView] = useState(location.state?.isVerified || false);
   const [municipalityMap, setMunicipalityMap] = useState({});
@@ -150,7 +201,8 @@ export default function MLGOView() {
   });
 
 
-  const [remarks, setRemarks] = useState({}); // object per tab for PO's remarks
+ const [remarks, setRemarks] = useState({}); // object per tab for PO's remarks
+const [poRemarks, setPoRemarks] = useState({}); // per-indicator remarks from PO
   const [verifiedFlag, setVerifiedFlag] = useState({}); // object per tab
 
   // Helper function to get tab name (fallback)
@@ -530,16 +582,20 @@ useEffect(() => {
               }
             }
             
-            // Load PO remarks
-            if (verifiedData.remarks) {
-              let poRemarks = {};
-              if (verifiedData.remarks && typeof verifiedData.remarks === 'object' && verifiedData.remarks.__keyMap) {
-                poRemarks = decompressRemarks(verifiedData.remarks);
-              } else {
-                poRemarks = { [activeTab]: verifiedData.remarks };
-              }
-              setRemarks(poRemarks);
-            }
+       // Load PO remarks
+if (verifiedData.poRemarks) {
+  let poRemarksData = verifiedData.poRemarks;
+  if (poRemarksData && poRemarksData.__keyMap) {
+    poRemarksData = decompressRemarks(poRemarksData);
+  }
+  setPoRemarks(poRemarksData);
+  console.log("📝 Loaded PO remarks from verified data:", poRemarksData);
+}
+
+// Load general remarks if any
+if (verifiedData.remarks) {
+  setRemarks({ [activeTab]: verifiedData.remarks });
+}
             
             const lguData = {
               id: 1,
@@ -665,16 +721,31 @@ useEffect(() => {
         console.log("Loaded LGU answers metadata:", _metadata);
         console.log("Answers were compressed?", !!answers.__keyMap);
         
-        // Check if this assessment has PO remarks in metadata
+     // Check if this assessment has PO remarks in metadata
 // Check for PO remarks from navigation state (returned from PO)
 if (location.state?.poRemarks) {
-  const poRemarks = decompressRemarks(location.state.poRemarks);
-  setRemarks(poRemarks);
-  console.log("📝 Loaded PO remarks from navigation state:", poRemarks);
+  let poRemarksData = location.state.poRemarks;
+  // Check if compressed
+  if (poRemarksData && poRemarksData.__keyMap) {
+    poRemarksData = decompressRemarks(poRemarksData);
+  }
+  setPoRemarks(poRemarksData);
+  console.log("📝 Loaded PO remarks from navigation state:", poRemarksData);
 } else if (_metadata?.poRemarks) {
-  const poRemarks = decompressRemarks(_metadata.poRemarks);
-  setRemarks(poRemarks);
-  console.log("📝 Loaded PO remarks from metadata:", poRemarks);
+  let poRemarksData = _metadata.poRemarks;
+  // Check if compressed
+  if (poRemarksData && poRemarksData.__keyMap) {
+    poRemarksData = decompressRemarks(poRemarksData);
+  }
+  setPoRemarks(poRemarksData);
+  console.log("📝 Loaded PO remarks from metadata:", poRemarksData);
+}
+
+// Also load general remarks (per tab) if needed
+if (location.state?.remarks) {
+  setRemarks(location.state.remarks);
+} else if (_metadata?.remarks) {
+  setRemarks({ [activeTab]: _metadata.remarks });
 }
         
        // Determine status and flags based on metadata OR navigation state
@@ -689,6 +760,17 @@ console.log("Status flags - isReturnedFromPO:", isReturnedFromPO, "isForwarded:"
           setLguRemarks(_metadata.mlgoRemarks);
           console.log("📝 Loaded saved MLGO remarks:", _metadata.mlgoRemarks);
         }
+
+     // Load PO remarks from metadata
+if (_metadata?.poRemarks) {
+  let poRemarksData = _metadata.poRemarks;
+  // Check if compressed
+  if (poRemarksData && poRemarksData.__keyMap) {
+    poRemarksData = decompressRemarks(poRemarksData);
+  }
+  setPoRemarks(poRemarksData);  // This should be the object with indicatorPath keys
+  console.log("📝 Loaded PO remarks from metadata:", poRemarksData);
+}
         
         const lguName = location.state.lguName || location.state.municipality;
         
@@ -1002,6 +1084,7 @@ const handleForwardToPO = async () => {
     const { _metadata, ...answersData } = currentData;
     
     // Prepare forward data with ALL required fields
+
     const forwardData = {
       lguUid: metadata.uid || lguUid || currentUserUid,
       year: selectedYear,
@@ -1027,9 +1110,11 @@ const handleForwardToPO = async () => {
       municipality: lgu.municipality || metadata.municipality,
       mlgoUid: currentUserUid,
       cleanName: cleanName,
-      // Important: Add these fields for the PO dashboard
       type: "forwarded",
-      isNewForward: true
+      isNewForward: true,
+      // CRITICAL: Preserve PO remarks from metadata
+      poRemarks: currentData._metadata?.poRemarks || null,
+      indicatorRemarksRaw: currentData._metadata?.indicatorRemarksRaw || null
     };
     
     console.log("Forward data to save:", forwardData);
@@ -1442,6 +1527,102 @@ useEffect(() => {
     fetchAdminUid();
   }, []);
 
+  
+      // Generate unique path for each indicator (for storing remarks)
+const getIndicatorPath = (record, mainIndex, subIndex = null, nestedIndex = null) => {
+  let path = `${record.firebaseKey}`;
+  if (mainIndex !== undefined && mainIndex !== null) {
+    path += `_main_${mainIndex}`;
+  }
+  if (subIndex !== undefined && subIndex !== null) {
+    path += `_sub_${subIndex}`;
+  }
+  if (nestedIndex !== undefined && nestedIndex !== null) {
+    path += `_nested_${nestedIndex}`;
+  }
+  return path;
+};
+      // Get remark for specific indicator - memoized
+const getIndicatorRemark = React.useCallback((tabId, indicatorPath) => {
+  return lguRemarks[tabId]?.[indicatorPath] || "";
+}, [lguRemarks]);
+
+// Save remark for specific indicator - memoized
+const setIndicatorRemark = React.useCallback((tabId, indicatorPath, remark) => {
+  setLguRemarks(prev => ({
+    ...prev,
+    [tabId]: {
+      ...prev[tabId],
+      [indicatorPath]: remark
+    }
+  }));
+}, []);
+
+// Helper component for indicator remark textarea
+const IndicatorRemark = React.memo(({ tabId, indicatorPath, placeholder }) => {
+  // Use a ref to store the textarea DOM element
+  const textareaRef = React.useRef(null);
+  
+  // Load initial remark when component mounts
+  useEffect(() => {
+    const initialRemark = lguRemarks[tabId]?.[indicatorPath] || '';
+    if (textareaRef.current) {
+      textareaRef.current.value = initialRemark;
+    }
+  }, [tabId, indicatorPath]); // Only run when path changes, not on lguRemarks
+  
+  // Save to parent when textarea loses focus
+  const handleBlur = (e) => {
+    const newValue = e.target.value;
+    const currentValue = lguRemarks[tabId]?.[indicatorPath] || '';
+    if (newValue !== currentValue) {
+      setIndicatorRemark(tabId, indicatorPath, newValue);
+    }
+  };
+  
+  // Stop event propagation to prevent parent handlers from interfering
+  const stopPropagation = (e) => {
+    e.stopPropagation();
+  };
+  
+  return (
+    <div 
+      style={{
+        marginTop: "4px",        // REDUCED from 8px
+        padding: "4px",          // REDUCED from 6px
+        backgroundColor: "#fafafa",
+        borderRadius: "4px",
+        borderLeft: "3px solid #730101"
+      }}
+    >
+      <textarea
+        ref={textareaRef}
+        placeholder={placeholder || "Add specific remark for this indicator..."}
+        rows="1"                   // CHANGED from 2 to 1
+        defaultValue={lguRemarks[tabId]?.[indicatorPath] || ''}
+        onBlur={handleBlur}
+        onMouseDown={stopPropagation}
+        onMouseUp={stopPropagation}
+        onClick={stopPropagation}
+        onKeyDown={stopPropagation}
+        style={{
+          width: "100%",
+          padding: "4px 8px",      // REDUCED from 8px 10px
+          border: "1px solid #ffffff",
+          borderRadius: "4px",
+          fontSize: "11px",        // REDUCED from 12px
+          resize: "vertical",
+          fontFamily: "inherit",
+          backgroundColor: "#fffef7",
+          pointerEvents: "auto",
+          outline: "none",
+          lineHeight: "1.3"        // Added for better readability with smaller height
+        }}
+      />
+    </div>
+  );
+});
+
   // Helper function to convert image to base64
   const getBase64Image = (img) => {
     return new Promise((resolve) => {
@@ -1601,7 +1782,7 @@ useEffect(() => {
       ];     
       
       const tableData = [];     
-      
+
 // Helper function to get checkbox answers (UPDATED)
 const getCheckboxAnswers = (indicator, path) => {
   if (!indicator || !indicator.choices || !Array.isArray(indicator.choices)) {
@@ -3150,411 +3331,458 @@ const getIndicatorAnswer = (indicator, path) => {
                                   <div key={record.firebaseKey} className="reference-wrapper">
                                     
                                     {/* Main Indicators */}
-  {record.mainIndicators?.map((main, index) => {
+ {record.mainIndicators?.map((main, index) => {
    // Try both sanitized and original keys
-const radioKeySanitized = getAnswerKey(record, index, main.title, false, null, "radio");
-const radioKeyOriginal = `${selectedAssessmentId}_${activeTab}_${record.firebaseKey}_${index}_radio_${main.title}`;
-const baseKeySanitized = getAnswerKey(record, index, main.title);
-const baseKeyOriginal = `${selectedAssessmentId}_${activeTab}_${record.firebaseKey}_${index}_${main.title}`;
-const answer = lgu.data?.[radioKeySanitized] ?? lgu.data?.[radioKeyOriginal] ?? lgu.data?.[baseKeySanitized] ?? lgu.data?.[baseKeyOriginal];
+   const radioKeySanitized = getAnswerKey(record, index, main.title, false, null, "radio");
+   const radioKeyOriginal = `${selectedAssessmentId}_${activeTab}_${record.firebaseKey}_${index}_radio_${main.title}`;
+   const baseKeySanitized = getAnswerKey(record, index, main.title);
+   const baseKeyOriginal = `${selectedAssessmentId}_${activeTab}_${record.firebaseKey}_${index}_${main.title}`;
+   const answer = lgu.data?.[radioKeySanitized] ?? lgu.data?.[radioKeyOriginal] ?? lgu.data?.[baseKeySanitized] ?? lgu.data?.[baseKeyOriginal];
     
-// Try multiple patterns to find attachments (matching PO View)
-const attachmentsByIndicator = lgu.attachmentsByIndicator || {};
+   // Try multiple patterns to find attachments (matching PO View)
+   const attachmentsByIndicator = lgu.attachmentsByIndicator || {};
 
-// Pattern 1: Original format (without assessment ID)
-const pattern1 = `${record.firebaseKey}_${index}_${main.title}`;
-// Pattern 2: With underscores instead of spaces
-const pattern2 = `${record.firebaseKey}_${index}_${main.title.replace(/\s+/g, '_')}`;
-// Pattern 3: With assessment ID and tab ID
-const pattern3 = `${selectedAssessmentId}_${activeTab}_${record.firebaseKey}_${index}_${main.title}`;
-// Pattern 4: With assessment ID, tab ID, and underscores
-const pattern4 = `${selectedAssessmentId}_${activeTab}_${record.firebaseKey}_${index}_${main.title.replace(/\s+/g, '_')}`;
+   // Pattern 1: Original format (without assessment ID)
+   const pattern1 = `${record.firebaseKey}_${index}_${main.title}`;
+   // Pattern 2: With underscores instead of spaces
+   const pattern2 = `${record.firebaseKey}_${index}_${main.title.replace(/\s+/g, '_')}`;
+   // Pattern 3: With assessment ID and tab ID
+   const pattern3 = `${selectedAssessmentId}_${activeTab}_${record.firebaseKey}_${index}_${main.title}`;
+   // Pattern 4: With assessment ID, tab ID, and underscores
+   const pattern4 = `${selectedAssessmentId}_${activeTab}_${record.firebaseKey}_${index}_${main.title.replace(/\s+/g, '_')}`;
 
-let indicatorAttachments = attachmentsByIndicator[pattern1] || 
-                          attachmentsByIndicator[pattern2] || 
-                          attachmentsByIndicator[pattern3] || 
-                          attachmentsByIndicator[pattern4] || [];
+   let indicatorAttachments = attachmentsByIndicator[pattern1] || 
+                             attachmentsByIndicator[pattern2] || 
+                             attachmentsByIndicator[pattern3] || 
+                             attachmentsByIndicator[pattern4] || [];
 
-// If still not found, search through all keys
-if (indicatorAttachments.length === 0) {
-  Object.keys(attachmentsByIndicator).forEach(key => {
-    if (key.includes(`${record.firebaseKey}_${index}_`)) {
-      indicatorAttachments = [...indicatorAttachments, ...attachmentsByIndicator[key]];
-    }
-  });
-}
+   // If still not found, search through all keys
+   if (indicatorAttachments.length === 0) {
+     Object.keys(attachmentsByIndicator).forEach(key => {
+       if (key.includes(`${record.firebaseKey}_${index}_`)) {
+         indicatorAttachments = [...indicatorAttachments, ...attachmentsByIndicator[key]];
+       }
+     });
+   }
 
-console.log(`Main indicator "${main.title}" - Found ${indicatorAttachments.length} attachments`);
+   console.log(`Main indicator "${main.title}" - Found ${indicatorAttachments.length} attachments`);
     
+   return (
+     <div key={index} className="reference-wrapper">
+        <div className="reference-row" style={{ border: "1px solid #cfcfcf" }}>
+           <div className="reference-label" style={{
+             width: "45%",
+             background: "#e6f0fa",
+             padding: "6px 10px",
+             fontWeight: 500,
+             borderRight: "1px solid #cfcfcf",
+             color: "#0c1a4b",
+             fontSize: "13px"
+           }}>
+             {main.title}
+           </div>
+
+           <div className="mainreference-field" style={{
+             width: "55%",
+             padding: "4px 10px",
+             background: "#ffffff"
+           }}>
+             <div className="field-content">
+               {main.fieldType === "multiple" && main.choices.map((choice, i) => {
+                 // Try both sanitized and original keys
+                 const radioKeySanitized = getAnswerKey(record, index, main.title, false, null, "radio");
+                 const radioKeyOriginal = `${selectedAssessmentId}_${activeTab}_${record.firebaseKey}_${index}_radio_${main.title}`;
+                 const answerValue = lgu.data?.[radioKeySanitized]?.value ?? lgu.data?.[radioKeyOriginal]?.value;
+                 
+                 return (
+                   <div key={i}>
+                     <input 
+                       type="radio" 
+                       name={`${record.firebaseKey}_${index}_${main.title}`}
+                       checked={isRadioSelected(answerValue, choice, i)}
+                       disabled 
+                     /> 
+                     <span>
+                       {choice && typeof choice === "object"
+                         ? (choice.label ?? choice.value ?? choice.name ?? choice.title ?? choice.text ?? "")
+                         : choice}
+                     </span>
+                   </div>
+                 );
+               })}
+               
+               {main.fieldType === "checkbox" && main.choices.map((choice, i) => {
+                 const checkboxKey = getAnswerKey(record, index, `${main.title}_${i}`, false, null, "checkbox");
+                 const checkboxAnswer = lgu.data?.[checkboxKey];
+                 
+                 return (
+                   <div key={i}>
+                     <input 
+                       type="checkbox" 
+                       checked={checkboxAnswer?.value === true}
+                       disabled 
+                     /> 
+                     <span>
+                       {choice && typeof choice === "object"
+                         ? (choice.label ?? choice.value ?? choice.name ?? choice.title ?? choice.text ?? "")
+                         : choice}
+                     </span>
+                   </div>
+                 );
+               })}
+               
+               {(main.fieldType === "short" || main.fieldType === "integer" || main.fieldType === "date") && (
+                 <div>
+                   {(() => {
+                     // Try both sanitized and original keys to find the answer
+                     const sanitizedKey = getAnswerKey(record, index, main.title);
+                     const originalKey = `${selectedAssessmentId}_${activeTab}_${record.firebaseKey}_${index}_${main.title}`;
+                     const answerValue = lgu.data?.[sanitizedKey]?.value ?? lgu.data?.[originalKey]?.value;
+                     
+                     if (answerValue) {
+                       return (
+                         <span>
+                           {main.fieldType === "integer" 
+                             ? new Intl.NumberFormat('en-US').format(parseFloat(answerValue))
+                             : main.fieldType === "date" 
+                               ? new Date(answerValue).toLocaleDateString("en-US", {
+                                   year: "numeric",
+                                   month: "long",
+                                   day: "numeric",
+                                 })
+                               : answerValue
+                           }
+                         </span>
+                       );
+                     } else {
+                       return (
+                         <span style={{ fontStyle: "italic", color: "gray" }}>
+                           No answer provided
+                         </span>
+                       );
+                     }
+                   })()}
+                 </div>
+               )}
+             </div>
+           </div>
+         </div>
+
+         {/* Mode of Verification for main indicators */}
+         {main.verification && getVerificationArray(main.verification).length > 0 && (
+           <div className="reference-verification-full" style={{ width: "100%" }}>
+             <div className="reference-row" style={{ display: "flex", border: "none" }}>
+               <div className="reference-label" style={{
+                 width: "45%",
+                 background: "transparent",
+                 borderRight: "1px solid #cfcfcf",
+                 padding: "6px 12px",
+                 border: "none",
+                 display: "flex",
+                 flexDirection: "column",
+                 gap: "4px",
+                 textAlign: "left",
+               }}>
+                 <span style={{ display: "inline-block", flexShrink: 0, fontWeight: 700, color: "#081a4b" }}>Mode of Verification</span>
+                 <div style={{ display: "flex", flexDirection: "column", gap: "4px", width: "100%" }}>
+                   {getVerificationArray(main.verification).map((v, idx) => (
+                     <div key={idx} style={{ display: "flex", alignItems: "center", gap: "8px", width: "100%" }}>
+                       <span style={{
+                         width: "6px",
+                         height: "6px",
+                         backgroundColor: "black",
+                         borderRadius: "50%",
+                         display: "inline-block",
+                         flexShrink: 0,
+                         marginLeft: "50px"
+                       }}></span>
+                       <span style={{ fontStyle: "italic", fontSize: "12px" }}>{v}</span>
+                     </div>
+                   ))}
+                 </div>
+               </div>
+               
+               <div className="reference-field" style={{
+                 borderLeft: "1px solid #cfcfcf",
+                 width: "55%",
+                 padding: "6px 12px",
+                 background: "#ffffff",
+                 display: "flex",
+                 flexDirection: "column",
+                 alignItems: "flex-end",
+                 border: "none",
+                 gap: "8px"
+               }}>
+                 <div style={{
+                   display: "flex",
+                   flexDirection: "column",
+                   gap: "6px",
+                   width: "100%"
+                 }}>
+                   {indicatorAttachments.length > 0 && (
+                     <div style={{
+                       display: "flex",
+                       flexWrap: "wrap",
+                       gap: "8px",
+                       width: "100%",
+                       marginTop: "8px"
+                     }}>
+                       {indicatorAttachments.map((attachment, idx) => (
+                         <div key={idx} style={{
+                           display: "flex",
+                           alignItems: "center",
+                           gap: "4px",
+                           backgroundColor: "#e8f5e9",
+                           padding: "4px 8px",
+                           borderRadius: "16px",
+                           fontSize: "11px",
+                           border: "1px solid #c8e6c9",
+                           maxWidth: "900px"
+                         }}>
+                           <span style={{ fontSize: "14px" }}>📎</span>
+                           <span style={{ 
+                             overflow: "hidden", 
+                             textOverflow: "ellipsis",
+                             whiteSpace: "nowrap",
+                             color: "#0c1a4b",
+                             flex: 1,
+                             maxWidth: "200px"
+                           }}>
+                             {attachment.name || 'Attachment'}
+                           </span>
+                           
+                           <button
+                             onClick={() => viewAttachment(attachment)}
+                             style={{
+                               background: "none",
+                               border: "none",
+                               cursor: "pointer",
+                               padding: "4px 8px",
+                               fontSize: "14px",
+                               color: "#0c1a4b",
+                               display: "flex",
+                               alignItems: "center",
+                               borderRadius: "4px",
+                               transition: "all 0.2s"
+                             }}
+                             onMouseOver={(e) => e.currentTarget.style.backgroundColor = "#c8e6c9"}
+                             onMouseOut={(e) => e.currentTarget.style.backgroundColor = "transparent"}
+                             title="View attachment"
+                           >
+                             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                               <path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"/>
+                               <circle cx="12" cy="12" r="3"/>
+                             </svg>
+                           </button>
+                           
+                           <button
+                             onClick={() => downloadAttachment(attachment)}
+                             style={{
+                               background: "none",
+                               border: "none",
+                               cursor: "pointer",
+                               padding: "4px 8px",
+                               fontSize: "16px",
+                               color: "#0c1a4b",
+                               display: "flex",
+                               alignItems: "center",
+                               borderRadius: "4px",
+                               transition: "all 0.2s"
+                             }}
+                             onMouseOver={(e) => e.currentTarget.style.backgroundColor = "#c8e6c9"}
+                             onMouseOut={(e) => e.currentTarget.style.backgroundColor = "transparent"}
+                             title="Download attachment"
+                           >
+                             <FiDownload />
+                           </button>
+                         </div>
+                       ))}
+                     </div>
+                   )}
+                 </div>
+               </div>
+             </div>
+           </div>
+         )}
+         
+    {/* ===== DISPLAY PO REMARKS IF EXISTS ===== */}
+<PORemarkDisplay
+  indicatorPath={getIndicatorPath(record, index)}
+  poRemarks={poRemarks}
+/>
+      {/* ===== INDICATOR REMARKS TEXTAREA (EDITABLE ONLY IF NOT VERIFIED) ===== */}
+{!location.state?.isVerified ? (
+  <IndicatorRemark
+    tabId={activeTab}
+    indicatorPath={getIndicatorPath(record, index)}
+    placeholder="📝 Add remarks for LGU...."
+  />
+) : (
+  (() => {
+    const remarkValue = lguRemarks[activeTab]?.[getIndicatorPath(record, index)] || "";
+    if (!remarkValue) return null;
     return (
-      <div key={index} className="reference-wrapper">
-   <div className="reference-row" style={{ border: "1px solid #cfcfcf" }}>
-  <div className="reference-label" style={{
-    width: "45%",
-    background: "#e6f0fa",
-    padding: "6px 10px",
-    fontWeight: 500,
-    borderRight: "1px solid #cfcfcf",
-    color: "#0c1a4b",
-    fontSize: "13px"
-  }}>
-    {main.title}
-  </div>
-
-  <div className="mainreference-field" style={{
-    width: "55%",
-    padding: "4px 10px",
-    background: "#ffffff"
-  }}>
-    <div className="field-content">
-              
-            {main.fieldType === "multiple" &&
-  main.choices.map((choice, i) => {
-    // Try both sanitized and original keys
-    const radioKeySanitized = getAnswerKey(record, index, main.title, false, null, "radio");
-    const radioKeyOriginal = `${selectedAssessmentId}_${activeTab}_${record.firebaseKey}_${index}_radio_${main.title}`;
-    const answerValue = lgu.data?.[radioKeySanitized]?.value ?? lgu.data?.[radioKeyOriginal]?.value;
-    
-    return (
-      <div key={i}>
-        <input 
-          type="radio" 
-          name={`${record.firebaseKey}_${index}_${main.title}`}
-          checked={isRadioSelected(answerValue, choice, i)}
-          disabled 
-        /> 
-        <span>
-          {choice && typeof choice === "object"
-            ? (choice.label ?? choice.value ?? choice.name ?? choice.title ?? choice.text ?? "")
-            : choice}
-        </span>
-      </div>
-    );
-  })
-}
-              
-              {main.fieldType === "checkbox" &&
-                main.choices.map((choice, i) => {
-                  const checkboxKey = getAnswerKey(record, index, `${main.title}_${i}`, false, null, "checkbox");
-                  const checkboxAnswer = lgu.data?.[checkboxKey];
-                  
-                  return (
-                    <div key={i}>
-                      <input 
-                        type="checkbox" 
-                        checked={checkboxAnswer?.value === true}
-                        disabled 
-                      /> 
-                      <span>
-                        {choice && typeof choice === "object"
-                          ? (choice.label ?? choice.value ?? choice.name ?? choice.title ?? choice.text ?? "")
-                          : choice}
-                      </span>
-                    </div>
-                  );
-                })
-              }
-              
-              {(main.fieldType === "short" || main.fieldType === "integer" || main.fieldType === "date") && (
-  <div>
-    {(() => {
-      // Try both sanitized and original keys to find the answer
-      const sanitizedKey = getAnswerKey(record, index, main.title);
-      const originalKey = `${selectedAssessmentId}_${activeTab}_${record.firebaseKey}_${index}_${main.title}`;
-      const answerValue = lgu.data?.[sanitizedKey]?.value ?? lgu.data?.[originalKey]?.value;
-      
-      if (answerValue) {
-        return (
-          <span>
-            {main.fieldType === "integer" 
-              ? new Intl.NumberFormat('en-US').format(parseFloat(answerValue))
-              : main.fieldType === "date" 
-                ? new Date(answerValue).toLocaleDateString("en-US", {
-                    year: "numeric",
-                    month: "long",
-                    day: "numeric",
-                  })
-                : answerValue
-            }
-          </span>
-        );
-      } else {
-        return (
-          <span style={{ fontStyle: "italic", color: "gray" }}>
-            No answer provided
-          </span>
-        );
-      }
-    })()}
-  </div>
-)}
-            </div>
-          </div>
+      <div 
+        style={{
+          marginTop: "4px",
+          padding: "6px 10px",
+          backgroundColor: "#e8f5e9",
+          borderRadius: "4px",
+          borderLeft: "3px solid #006736",
+          fontSize: "11px"
+        }}
+      >
+        <div style={{
+          display: "flex",
+          alignItems: "center",
+          gap: "6px",
+          marginBottom: "4px",
+          fontWeight: "bold",
+          color: "#006736",
+          fontSize: "11px"
+        }}>
+          <span>📝</span>
+          <span>MLGO Remark:</span>
         </div>
-  
-        {/* Mode of Verification for main indicators */}
-        {main.verification && getVerificationArray(main.verification).length > 0 && (
-          <div className="reference-verification-full" style={{ width: "100%" }}>
-            <div className="reference-row" style={{ display: "flex", border: "none" }}>
-              <div className="reference-label" style={{
-                width: "45%",
-                background: "transparent",
-                borderRight: "1px solid #cfcfcf",
-                padding: "6px 12px",
-                border: "none",
-                display: "flex",
-                flexDirection: "column",
-                gap: "4px",
-                textAlign: "left",
-              }}>
-                <span style={{ display: "inline-block", flexShrink: 0, fontWeight: 700, color: "#081a4b" }}>Mode of Verification</span>
-                <div style={{ display: "flex", flexDirection: "column", gap: "4px", width: "100%" }}>
-                  {getVerificationArray(main.verification).map((v, idx) => (
-                    <div key={idx} style={{ display: "flex", alignItems: "center", gap: "8px", width: "100%" }}>
-                      <span style={{
-                        width: "6px",
-                        height: "6px",
-                        backgroundColor: "black",
-                        borderRadius: "50%",
-                        display: "inline-block",
-                        flexShrink: 0,
-                        marginLeft: "50px"
-                      }}></span>
-                      <span style={{ fontStyle: "italic", fontSize: "12px" }}>{v}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-              
-              <div className="reference-field" style={{
-                borderLeft: "1px solid #cfcfcf",
-                width: "55%",
-                padding: "6px 12px",
-                background: "#ffffff",
-                display: "flex",
-                flexDirection: "column",
-                alignItems: "flex-end",
-                border: "none",
-                gap: "8px"
-              }}>
-                <div style={{
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: "6px",
-                  width: "100%"
-                }}>
-                  {indicatorAttachments.length > 0 && (
-                    <div style={{
-                      display: "flex",
-                      flexWrap: "wrap",
-                      gap: "8px",
-                      width: "100%",
-                      marginTop: "8px"
-                    }}>
-                      {indicatorAttachments.map((attachment, idx) => (
-                 <div key={idx} style={{
-  display: "flex",
-  alignItems: "center",
-  gap: "4px",
-  backgroundColor: "#e8f5e9",
-  padding: "4px 8px",
-  borderRadius: "16px",
-  fontSize: "11px",
-  border: "1px solid #c8e6c9",
-  maxWidth: "900px"
-}}>
-                          <span style={{ fontSize: "14px" }}>📎</span>
-                          <span style={{ 
-                            overflow: "hidden", 
-                            textOverflow: "ellipsis",
-                            whiteSpace: "nowrap",
-                            color: "#0c1a4b",
-                            flex: 1,
-                            maxWidth: "200px"
-                          }}>
-                            {attachment.name || 'Attachment'}
-                          </span>
-                          
-                          <button
-                            onClick={() => viewAttachment(attachment)}
-                            style={{
-                              background: "none",
-                              border: "none",
-                              cursor: "pointer",
-                              padding: "4px 8px",
-                              fontSize: "14px",
-                              color: "#0c1a4b",
-                              display: "flex",
-                              alignItems: "center",
-                              borderRadius: "4px",
-                              transition: "all 0.2s"
-                            }}
-                            onMouseOver={(e) => e.currentTarget.style.backgroundColor = "#c8e6c9"}
-                            onMouseOut={(e) => e.currentTarget.style.backgroundColor = "transparent"}
-                            title="View attachment"
-                          >
-                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                              <path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"/>
-                              <circle cx="12" cy="12" r="3"/>
-                            </svg>
-                          </button>
-                          
-                          <button
-                            onClick={() => downloadAttachment(attachment)}
-                            style={{
-                              background: "none",
-                              border: "none",
-                              cursor: "pointer",
-                              padding: "4px 8px",
-                              fontSize: "16px",
-                              color: "#0c1a4b",
-                              display: "flex",
-                              alignItems: "center",
-                              borderRadius: "4px",
-                              transition: "all 0.2s"
-                            }}
-                            onMouseOver={(e) => e.currentTarget.style.backgroundColor = "#c8e6c9"}
-                            onMouseOut={(e) => e.currentTarget.style.backgroundColor = "transparent"}
-                            title="Download attachment"
-                          >
-                            <FiDownload />
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
+        <div style={{
+          fontStyle: "italic",
+          color: "#333",
+          whiteSpace: "pre-wrap",
+          wordBreak: "break-word",
+          fontSize: "11px",
+          lineHeight: "1.4"
+        }}>
+          {remarkValue}
+        </div>
       </div>
     );
-  })}
+  })()
+)}
+       </div>
+     );
+   })}
   
   {/* Sub Indicators */}
-  {record.subIndicators?.map((sub, index) => {
-    const radioKey = getAnswerKey(record, index, sub.title, true, null, "radio");
-    const baseKey = getAnswerKey(record, index, sub.title, true);
-    const answer = lgu.data?.[radioKey] ?? lgu.data?.[baseKey];
+{record.subIndicators?.map((sub, index) => {
+   const radioKey = getAnswerKey(record, index, sub.title, true, null, "radio");
+   const baseKey = getAnswerKey(record, index, sub.title, true);
+   const answer = lgu.data?.[radioKey] ?? lgu.data?.[baseKey];
+   
+   // Try multiple patterns to find attachments for sub indicators
+   const attachmentsByIndicator = lgu.attachmentsByIndicator || {};
+   
+   // Pattern 1: Original format
+   const subPattern1 = `${record.firebaseKey}_sub_${index}_${sub.title}`;
+   // Pattern 2: With underscores
+   const subPattern2 = `${record.firebaseKey}_sub_${index}_${sub.title.replace(/\s+/g, '_')}`;
+   // Pattern 3: With assessment ID and tab ID
+   const subPattern3 = `${selectedAssessmentId}_${activeTab}_${record.firebaseKey}_sub_${index}_${sub.title}`;
+   // Pattern 4: With assessment ID, tab ID, and underscores
+   const subPattern4 = `${selectedAssessmentId}_${activeTab}_${record.firebaseKey}_sub_${index}_${sub.title.replace(/\s+/g, '_')}`;
+   
+   let subIndicatorAttachments = attachmentsByIndicator[subPattern1] || 
+                                attachmentsByIndicator[subPattern2] || 
+                                attachmentsByIndicator[subPattern3] || 
+                                attachmentsByIndicator[subPattern4] || [];
+   
+   // If not found, search through keys containing the sub pattern
+   if (subIndicatorAttachments.length === 0) {
+     Object.keys(attachmentsByIndicator).forEach(key => {
+       if (key.includes(`${record.firebaseKey}_sub_${index}_`) && !key.includes('_nested_')) {
+         subIndicatorAttachments = [...subIndicatorAttachments, ...attachmentsByIndicator[key]];
+       }
+     });
+   }
+   
+   console.log(`Sub indicator "${sub.title}" - Found ${subIndicatorAttachments.length} attachments`);
     
-  // Try multiple patterns to find attachments for sub indicators (matching PO View)
-const attachmentsByIndicator = lgu.attachmentsByIndicator || {};
+   return (
+     <div key={index} className="reference-wrapper">
+        <div className="reference-row sub-row" style={{
+          display: "flex",
+          marginTop: "3px",
+          border: "1px solid #cfcfcf"
+        }}>
+          <div className="reference-label" style={{
+            width: "45%",
+            background: "#fff6f6",
+            padding: "6px 10px",
+            fontWeight: 500,
+            borderRight: "1px solid #cfcfcf",
+            fontSize: "12px"
+          }}>
+            {sub.title}
+          </div>
 
-// Pattern 1: Original format
-const subPattern1 = `${record.firebaseKey}_sub_${index}_${sub.title}`;
-// Pattern 2: With underscores
-const subPattern2 = `${record.firebaseKey}_sub_${index}_${sub.title.replace(/\s+/g, '_')}`;
-// Pattern 3: With assessment ID and tab ID
-const subPattern3 = `${selectedAssessmentId}_${activeTab}_${record.firebaseKey}_sub_${index}_${sub.title}`;
-// Pattern 4: With assessment ID, tab ID, and underscores
-const subPattern4 = `${selectedAssessmentId}_${activeTab}_${record.firebaseKey}_sub_${index}_${sub.title.replace(/\s+/g, '_')}`;
-
-let subIndicatorAttachments = attachmentsByIndicator[subPattern1] || 
-                             attachmentsByIndicator[subPattern2] || 
-                             attachmentsByIndicator[subPattern3] || 
-                             attachmentsByIndicator[subPattern4] || [];
-
-// If not found, search through keys containing the sub pattern
-if (subIndicatorAttachments.length === 0) {
-  Object.keys(attachmentsByIndicator).forEach(key => {
-    if (key.includes(`${record.firebaseKey}_sub_${index}_`) && !key.includes('_nested_')) {
-      subIndicatorAttachments = [...subIndicatorAttachments, ...attachmentsByIndicator[key]];
-    }
-  });
-}
-
-console.log(`Sub indicator "${sub.title}" - Found ${subIndicatorAttachments.length} attachments`);
-    
-    return (
-      <div key={index} className="reference-wrapper">
-<div className="reference-row sub-row" style={{
-  display: "flex",
-  marginTop: "3px",
-  border: "1px solid #cfcfcf"
-}}>
-  <div className="reference-label" style={{
-    width: "45%",
-    background: "#fff6f6",
-    padding: "6px 10px",
-    fontWeight: 500,
-    borderRight: "1px solid #cfcfcf",
-    fontSize: "12px"
-  }}>
-    {sub.title}
-  </div>
-
-  <div className="reference-field" style={{
-    width: "55%",
-    padding: "4px 10px",
-    background: "#ffffff"
-  }}>
-            {sub.fieldType === "multiple" &&
-              sub.choices.map((choice, i) => (
-                <div key={i}>
-                  <input 
-                    type="radio" 
-                    name={`${record.firebaseKey}_sub_${index}_${sub.title}`}
-                    checked={isRadioSelected(answer?.value, choice, i)}
-                    disabled 
-                  /> 
-                  <span>
-                    {choice && typeof choice === "object"
-                      ? (choice.label ?? choice.value ?? choice.name ?? choice.title ?? choice.text ?? "")
-                      : choice}
-                  </span>
-                </div>
-              ))
+          <div className="reference-field" style={{
+            width: "55%",
+            padding: "4px 10px",
+            background: "#ffffff"
+          }}>
+            {sub.fieldType === "multiple" && sub.choices.map((choice, i) => (
+               <div key={i}>
+                 <input 
+                   type="radio" 
+                   name={`${record.firebaseKey}_sub_${index}_${sub.title}`}
+                   checked={isRadioSelected(answer?.value, choice, i)}
+                   disabled 
+                 /> 
+                 <span>
+                   {choice && typeof choice === "object"
+                     ? (choice.label ?? choice.value ?? choice.name ?? choice.title ?? choice.text ?? "")
+                     : choice}
+                 </span>
+               </div>
+             ))
             }
             
-            {sub.fieldType === "checkbox" &&
-              sub.choices.map((choice, i) => {
-                const checkboxKey = getAnswerKey(record, index, `${sub.title}_${i}`, true, null, "checkbox");
-                const checkboxAnswer = lgu.data?.[checkboxKey];
-                
-                return (
-                  <div key={i}>
-                    <input 
-                      type="checkbox" 
-                      checked={checkboxAnswer?.value === true}
-                      disabled 
-                    /> 
-                    <span>
-                      {choice && typeof choice === "object"
-                        ? (choice.label ?? choice.value ?? choice.name ?? choice.title ?? choice.text ?? "")
-                        : choice}
-                    </span>
-                  </div>
-                );
-              })
+            {sub.fieldType === "checkbox" && sub.choices.map((choice, i) => {
+               const checkboxKey = getAnswerKey(record, index, `${sub.title}_${i}`, true, null, "checkbox");
+               const checkboxAnswer = lgu.data?.[checkboxKey];
+               
+               return (
+                 <div key={i}>
+                   <input 
+                     type="checkbox" 
+                     checked={checkboxAnswer?.value === true}
+                     disabled 
+                   /> 
+                   <span>
+                     {choice && typeof choice === "object"
+                       ? (choice.label ?? choice.value ?? choice.name ?? choice.title ?? choice.text ?? "")
+                       : choice}
+                   </span>
+                 </div>
+               );
+             })
             }
             
             {(sub.fieldType === "short" || sub.fieldType === "integer" || sub.fieldType === "date") && (
-              <div>
-                {answer?.value ? (
-                  <span>
-                    {sub.fieldType === "integer" 
-                      ? new Intl.NumberFormat('en-US').format(parseFloat(answer.value))
-                      : sub.fieldType === "date" 
-                        ? new Date(answer.value).toLocaleDateString("en-US", {
-                            year: "numeric",
-                            month: "long",
-                            day: "numeric",
-                          })
-                        : answer.value
-                    }
-                  </span>
-                ) : (
-                  <span style={{ fontStyle: "italic", color: "gray" }}>
-                    No answer provided
-                  </span>
-                )}
-              </div>
-            )}
+               <div>
+                 {answer?.value ? (
+                   <span>
+                     {sub.fieldType === "integer" 
+                       ? new Intl.NumberFormat('en-US').format(parseFloat(answer.value))
+                       : sub.fieldType === "date" 
+                         ? new Date(answer.value).toLocaleDateString("en-US", {
+                             year: "numeric",
+                             month: "long",
+                             day: "numeric",
+                           })
+                         : answer.value
+                     }
+                   </span>
+                 ) : (
+                   <span style={{ fontStyle: "italic", color: "gray" }}>
+                     No answer provided
+                   </span>
+                 )}
+               </div>
+             )}
           </div>
         </div>
-  
-        {/* Mode of Verification for sub indicators - Now with attachments in the right column */}
+
+        {/* Mode of Verification for sub indicators */}
         {sub.verification && getVerificationArray(sub.verification).length > 0 && (
           <div className="reference-verification-full" style={{ width: "100%" }}>
             <div className="reference-row" style={{ display: "flex", border: "none" }}>
@@ -3614,18 +3842,18 @@ console.log(`Sub indicator "${sub.title}" - Found ${subIndicatorAttachments.leng
                       marginTop: "8px"
                     }}>
                       {subIndicatorAttachments.map((attachment, idx) => (
-                    <div key={idx} style={{
-  display: "flex",
-  alignItems: "center",
-  gap: "6px",
-  backgroundColor: "#e8f5e9",
-  padding: "6px 12px",
-  borderRadius: "20px",
-  fontSize: "12px",
-  border: "1px solid #c8e6c9",
-  maxWidth: "100%",
-  flexWrap: "wrap"
-}}>
+                        <div key={idx} style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "6px",
+                          backgroundColor: "#e8f5e9",
+                          padding: "6px 12px",
+                          borderRadius: "20px",
+                          fontSize: "12px",
+                          border: "1px solid #c8e6c9",
+                          maxWidth: "100%",
+                          flexWrap: "wrap"
+                        }}>
                           <span style={{ fontSize: "14px" }}>📎</span>
                           <span style={{ 
                             overflow: "hidden", 
@@ -3691,62 +3919,117 @@ console.log(`Sub indicator "${sub.title}" - Found ${subIndicatorAttachments.leng
             </div>
           </div>
         )}
-  
-  {sub.nestedSubIndicators && sub.nestedSubIndicators.length > 0 && (
-    <div className="nested-reference-wrapper">
-      {sub.nestedSubIndicators.map((nested, nestedIndex) => {
-        const nestedRadioKey = getAnswerKey(record, index, nested.title, true, nestedIndex, "radio");
-        const baseNestedKey = getAnswerKey(record, index, nested.title, true, nestedIndex);
-        const nestedAnswer = lgu.data?.[nestedRadioKey] ?? lgu.data?.[baseNestedKey];
         
-        // Try multiple patterns to find attachments for nested indicators (matching PO View)
-const attachmentsByIndicator = lgu.attachmentsByIndicator || {};
 
-// Pattern 1: Original format
-const nestedPattern1 = `${record.firebaseKey}_sub_${index}_nested_${nestedIndex}_${nested.title}`;
-// Pattern 2: With underscores
-const nestedPattern2 = `${record.firebaseKey}_sub_${index}_nested_${nestedIndex}_${nested.title.replace(/\s+/g, '_')}`;
-// Pattern 3: With assessment ID and tab ID
-const nestedPattern3 = `${selectedAssessmentId}_${activeTab}_${record.firebaseKey}_sub_${index}_nested_${nestedIndex}_${nested.title}`;
-// Pattern 4: With assessment ID, tab ID, and underscores
-const nestedPattern4 = `${selectedAssessmentId}_${activeTab}_${record.firebaseKey}_sub_${index}_nested_${nestedIndex}_${nested.title.replace(/\s+/g, '_')}`;
-
-let nestedAttachments = attachmentsByIndicator[nestedPattern1] || 
-                       attachmentsByIndicator[nestedPattern2] || 
-                       attachmentsByIndicator[nestedPattern3] || 
-                       attachmentsByIndicator[nestedPattern4] || [];
-
-// If not found, search through keys containing the nested pattern
-if (nestedAttachments.length === 0) {
-  const searchPattern = `${record.firebaseKey}_sub_${index}_nested_${nestedIndex}_`;
-  Object.keys(attachmentsByIndicator).forEach(key => {
-    if (key.includes(searchPattern)) {
-      nestedAttachments = [...nestedAttachments, ...attachmentsByIndicator[key]];
-    }
-  });
-}
-
-console.log(`Nested indicator "${nested.title}" - Found ${nestedAttachments.length} attachments`);
+     {/* ===== DISPLAY PO REMARKS IF EXISTS ===== */}
+<PORemarkDisplay
+  indicatorPath={getIndicatorPath(record, null, index)}
+  poRemarks={poRemarks}
+/>
+     {/* ===== INDICATOR REMARKS TEXTAREA FOR SUB INDICATOR (EDITABLE ONLY IF NOT VERIFIED) ===== */}
+{!location.state?.isVerified ? (
+  <IndicatorRemark
+    tabId={activeTab}
+    indicatorPath={getIndicatorPath(record, null, index)}
+    placeholder="📝 Add remarks"
+  />
+) : (
+  (() => {
+    const remarkValue = lguRemarks[activeTab]?.[getIndicatorPath(record, null, index)] || "";
+    if (!remarkValue) return null;
+    return (
+      <div 
+        style={{
+          marginTop: "4px",
+          padding: "6px 10px",
+          backgroundColor: "#e8f5e9",
+          borderRadius: "4px",
+          borderLeft: "3px solid #006736",
+          fontSize: "11px"
+        }}
+      >
+        <div style={{
+          display: "flex",
+          alignItems: "center",
+          gap: "6px",
+          marginBottom: "4px",
+          fontWeight: "bold",
+          color: "#006736",
+          fontSize: "11px"
+        }}>
+          <span>📝</span>
+          <span>MLGO Remark:</span>
+        </div>
+        <div style={{
+          fontStyle: "italic",
+          color: "#333",
+          whiteSpace: "pre-wrap",
+          wordBreak: "break-word",
+          fontSize: "11px",
+          lineHeight: "1.4"
+        }}>
+          {remarkValue}
+        </div>
+      </div>
+    );
+  })()
+)}
         
-        return (
+        {/* Nested Sub Indicators */}
+        {sub.nestedSubIndicators && sub.nestedSubIndicators.length > 0 && (
+          <div className="nested-reference-wrapper">
+            {sub.nestedSubIndicators.map((nested, nestedIndex) => {
+              const nestedRadioKey = getAnswerKey(record, index, nested.title, true, nestedIndex, "radio");
+              const baseNestedKey = getAnswerKey(record, index, nested.title, true, nestedIndex);
+              const nestedAnswer = lgu.data?.[nestedRadioKey] ?? lgu.data?.[baseNestedKey];
+              
+              // Try multiple patterns to find attachments for nested indicators
+              const attachmentsByIndicator = lgu.attachmentsByIndicator || {};
+              
+              // Pattern 1: Original format
+              const nestedPattern1 = `${record.firebaseKey}_sub_${index}_nested_${nestedIndex}_${nested.title}`;
+              // Pattern 2: With underscores
+              const nestedPattern2 = `${record.firebaseKey}_sub_${index}_nested_${nestedIndex}_${nested.title.replace(/\s+/g, '_')}`;
+              // Pattern 3: With assessment ID and tab ID
+              const nestedPattern3 = `${selectedAssessmentId}_${activeTab}_${record.firebaseKey}_sub_${index}_nested_${nestedIndex}_${nested.title}`;
+              // Pattern 4: With assessment ID, tab ID, and underscores
+              const nestedPattern4 = `${selectedAssessmentId}_${activeTab}_${record.firebaseKey}_sub_${index}_nested_${nestedIndex}_${nested.title.replace(/\s+/g, '_')}`;
+              
+              let nestedAttachments = attachmentsByIndicator[nestedPattern1] || 
+                                     attachmentsByIndicator[nestedPattern2] || 
+                                     attachmentsByIndicator[nestedPattern3] || 
+                                     attachmentsByIndicator[nestedPattern4] || [];
+              
+              // If not found, search through keys containing the nested pattern
+              if (nestedAttachments.length === 0) {
+                const searchPattern = `${record.firebaseKey}_sub_${index}_nested_${nestedIndex}_`;
+                Object.keys(attachmentsByIndicator).forEach(key => {
+                  if (key.includes(searchPattern)) {
+                    nestedAttachments = [...nestedAttachments, ...attachmentsByIndicator[key]];
+                  }
+                });
+              }
+              
+              console.log(`Nested indicator "${nested.title}" - Found ${nestedAttachments.length} attachments`);
+              
+              return (
                 <div key={nested.id || nestedIndex} className="nested-reference-item">
-                <div className="nested-reference-row" style={{ display: "flex", border: "1px solid #cfcfcf" }}>
-  <div className="nested-reference-label" style={{ 
-    width: "45%", 
-    background: "#fff9c4",
-    padding: "5px 10px",
-    fontWeight: 500,
-    borderRight: "1px solid #cfcfcf",
-    fontSize: "12px"
-  }}>
-    {nested.title || 'Untitled'}
-  </div>
-  <div className="nested-reference-field" style={{ 
-    width: "55%", 
-    padding: "4px 10px",
-    background: "#ffffff"
-  }}>
-                      
+                  <div className="nested-reference-row" style={{ display: "flex", border: "1px solid #cfcfcf" }}>
+                    <div className="nested-reference-label" style={{ 
+                      width: "45%", 
+                      background: "#fff9c4",
+                      padding: "5px 10px",
+                      fontWeight: 500,
+                      borderRight: "1px solid #cfcfcf",
+                      fontSize: "12px"
+                    }}>
+                      {nested.title || 'Untitled'}
+                    </div>
+                    <div className="nested-reference-field" style={{ 
+                      width: "55%", 
+                      padding: "4px 10px",
+                      background: "#ffffff"
+                    }}>
                       {nested.fieldType === "multiple" && nested.choices?.map((choice, i) => (
                         <div key={i}>
                           <input 
@@ -3762,7 +4045,7 @@ console.log(`Nested indicator "${nested.title}" - Found ${nestedAttachments.leng
                           </span>
                         </div>
                       ))}
-  
+                      
                       {nested.fieldType === "checkbox" && nested.choices?.map((choice, i) => {
                         const nestedCheckboxKey = getAnswerKey(record, index, `${nested.title}_${i}`, true, nestedIndex, "checkbox");
                         const nestedCheckboxAnswer = lgu.data?.[nestedCheckboxKey];
@@ -3782,7 +4065,7 @@ console.log(`Nested indicator "${nested.title}" - Found ${nestedAttachments.leng
                           </div>
                         );
                       })}
-  
+                      
                       {(nested.fieldType === "short" || nested.fieldType === "integer" || nested.fieldType === "date") && (
                         <div>
                           {nestedAnswer?.value ? (
@@ -3805,7 +4088,7 @@ console.log(`Nested indicator "${nested.title}" - Found ${nestedAttachments.leng
                           )}
                         </div>
                       )}
-  
+                      
                       {!nested.fieldType && (
                         <span style={{ fontStyle: "italic", color: "gray" }}>
                           No field type selected
@@ -3817,17 +4100,17 @@ console.log(`Nested indicator "${nested.title}" - Found ${nestedAttachments.leng
                   {nested.verification && getVerificationArray(nested.verification).length > 0 && (
                     <div className="reference-verification-full" style={{ width: "100%" }}>
                       <div className="reference-row" style={{ display: "flex", border: "none" }}>
-                       <div className="reference-label" style={{
-  width: "45%",
-  background: "transparent",
-  padding: "4px 10px",
-  border: "none",
-  borderRight: "1px solid rgba(8, 26, 75, 0.25)",
-  display: "flex",
-  flexDirection: "column",
-  gap: "2px",
-  textAlign: "left",
-}}>
+                        <div className="reference-label" style={{
+                          width: "45%",
+                          background: "transparent",
+                          padding: "4px 10px",
+                          border: "none",
+                          borderRight: "1px solid rgba(8, 26, 75, 0.25)",
+                          display: "flex",
+                          flexDirection: "column",
+                          gap: "2px",
+                          textAlign: "left",
+                        }}>
                           <span style={{ display: "inline-block", flexShrink: 0, fontWeight: 700, color: "#081a4b"}}>Mode of Verification</span>
                           <div style={{ display: "flex", flexDirection: "column", gap: "4px", width: "100%" }}>
                             {getVerificationArray(nested.verification).map((v, idx) => (
@@ -3873,17 +4156,17 @@ console.log(`Nested indicator "${nested.title}" - Found ${nestedAttachments.leng
                                 marginTop: "8px"
                               }}>
                                 {nestedAttachments.map((attachment, idx) => (
-                             <div key={idx} style={{
-  display: "flex",
-  alignItems: "center",
-  gap: "4px",
-  backgroundColor: "#e8f5e9",
-  padding: "4px 8px",
-  borderRadius: "16px",
-  fontSize: "11px",
-  border: "1px solid #c8e6c9",
-  maxWidth: "900px"
-}}>
+                                  <div key={idx} style={{
+                                    display: "flex",
+                                    alignItems: "center",
+                                    gap: "4px",
+                                    backgroundColor: "#e8f5e9",
+                                    padding: "4px 8px",
+                                    borderRadius: "16px",
+                                    fontSize: "11px",
+                                    border: "1px solid #c8e6c9",
+                                    maxWidth: "900px"
+                                  }}>
                                     <span style={{ fontSize: "14px" }}>📎</span>
                                     <span style={{ 
                                       overflow: "hidden", 
@@ -3949,6 +4232,61 @@ console.log(`Nested indicator "${nested.title}" - Found ${nestedAttachments.leng
                       </div>
                     </div>
                   )}
+                  
+
+                {/* ===== DISPLAY PO REMARKS IF EXISTS ===== */}
+<PORemarkDisplay
+  indicatorPath={getIndicatorPath(record, null, index, nestedIndex)}
+  poRemarks={poRemarks}
+/>
+                            {/* ===== INDICATOR REMARKS TEXTAREA FOR NESTED INDICATOR (EDITABLE ONLY IF NOT VERIFIED) ===== */}
+{!location.state?.isVerified ? (
+  <IndicatorRemark
+    tabId={activeTab}
+    indicatorPath={getIndicatorPath(record, null, index, nestedIndex)}
+    placeholder="📝 Add remarks"
+  />
+) : (
+  (() => {
+    const remarkValue = lguRemarks[activeTab]?.[getIndicatorPath(record, null, index, nestedIndex)] || "";
+    if (!remarkValue) return null;
+    return (
+      <div 
+        style={{
+          marginTop: "4px",
+          padding: "6px 10px",
+          backgroundColor: "#e8f5e9",
+          borderRadius: "4px",
+          borderLeft: "3px solid #006736",
+          fontSize: "11px"
+        }}
+      >
+        <div style={{
+          display: "flex",
+          alignItems: "center",
+          gap: "6px",
+          marginBottom: "4px",
+          fontWeight: "bold",
+          color: "#006736",
+          fontSize: "11px"
+        }}>
+          <span>📝</span>
+          <span>MLGO Remark:</span>
+        </div>
+        <div style={{
+          fontStyle: "italic",
+          color: "#333",
+          whiteSpace: "pre-wrap",
+          wordBreak: "break-word",
+          fontSize: "11px",
+          lineHeight: "1.4"
+        }}>
+          {remarkValue}
+        </div>
+      </div>
+    );
+  })()
+)}
                 </div>
               );
             })}
@@ -3975,85 +4313,7 @@ console.log(`Nested indicator "${nested.title}" - Found ${nestedAttachments.leng
                         </div>
                       )}
   
-      {/* Remarks Section */}
-<div style={{
-  marginTop: "20px",
-  padding: "12px 15px",
-  backgroundColor: "#f9f9f9",
-  borderRadius: "6px",
-  border: "1px solid #e0e0e0"
-}}>
-  {/* PO Remarks - Display when assessment is returned from PO */}
-  {(isReturnedFromPO || (remarks && Object.keys(remarks).length > 0)) && (() => {
-    // Ensure remarks is decompressed
-    let displayRemarks = remarks;
-    if (remarks && remarks.__keyMap) {
-      const decompressed = {};
-      const keyMap = remarks.__keyMap;
-      Object.keys(remarks).forEach(shortKey => {
-        if (shortKey !== '__keyMap') {
-          const longKey = keyMap[shortKey];
-          if (longKey) {
-            decompressed[longKey] = remarks[shortKey];
-          }
-        }
-      });
-      displayRemarks = decompressed;
-    }
-    
-    // Get remark for current tab
-    let poRemark = null;
-    if (displayRemarks && typeof displayRemarks === 'object') {
-      poRemark = displayRemarks[activeTab];
-      // If not found by tab, try to get any string remark
-      if (!poRemark && typeof displayRemarks === 'string') {
-        poRemark = displayRemarks;
-      }
-    } else if (typeof displayRemarks === 'string') {
-      poRemark = displayRemarks;
-    }
-    
-    if (poRemark && poRemark.trim() !== "") {
-      return (
-        <div style={{
-          marginBottom: "15px",
-          padding: "8px 12px",
-          backgroundColor: "#fff8e1",
-          borderRadius: "4px",
-          fontSize: "12px",
-          color: "#856404",
-          borderLeft: "3px solid #ffc107"
-        }}>
-          <strong style={{ fontSize: "12px", display: "block", marginBottom: "4px" }}>📝 Remarks from PO:</strong>
-          <span style={{ fontStyle: "italic" }}>{poRemark}</span>
-        </div>
-      );
-    }
-    return null;
-  })()}
-
-  {/* MLGO Remarks for LGU - Textarea */}
-  <div style={{ marginBottom: "10px" }}>
-    <textarea
-      placeholder="Add remarks for LGU..."
-      rows="2"
-      value={lguRemarks[activeTab] || ""}
-      onChange={(e) => setLguRemarks(prev => ({ 
-        ...prev, 
-        [activeTab]: e.target.value 
-      }))}
-      style={{
-        width: "100%",
-        padding: "8px 10px",
-        border: "1px solid #ccc",
-        borderRadius: "4px",
-        fontSize: "12px",
-        resize: "vertical",
-        fontFamily: "inherit"
-      }}
-    />
-  </div>
-</div>
+ 
 
                   {/* Flag as Verified Button - Outside the box */}
 <div style={{

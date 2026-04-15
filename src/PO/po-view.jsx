@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from "react";
 import { db, auth} from "src/firebase";
 import style from "src/PO-CSS/po-view.module.css";
@@ -64,6 +65,7 @@ const [previewAttachment, setPreviewAttachment] = useState(null);
   });
 
   const [remarks, setRemarks] = useState({}); // object per tab
+  const [indicatorRemarks, setIndicatorRemarks] = useState({}); // { [tabId]: { [indicatorPath]: "remark" } }
 // ===== DECOMPRESSION FUNCTIONS (to read compressed data from LGU) =====
 const decompressAnswers = (compressed) => {
   if (!compressed || !compressed.__keyMap) return compressed;
@@ -100,6 +102,81 @@ const decompressAttachments = (compressed) => {
   
   return decompressed;
 };
+// ===== REMARKS HELPER FUNCTIONS =====
+const getIndicatorPath = (record, mainIndex, subIndex = null, nestedIndex = null) => {
+  let path = `${record.firebaseKey}`;
+  if (mainIndex !== undefined && mainIndex !== null) {
+    path += `_main_${mainIndex}`;
+  }
+  if (subIndex !== undefined && subIndex !== null) {
+    path += `_sub_${subIndex}`;
+  }
+  if (nestedIndex !== undefined && nestedIndex !== null) {
+    path += `_nested_${nestedIndex}`;
+  }
+  return path;
+};
+
+// Component for PO to add remarks on indicators
+
+const IndicatorRemarkEditor = ({ tabId, indicatorPath, placeholder, onRemarkChange, currentValue }) => {
+  const textareaRef = React.useRef(null);
+  
+  // Load initial remark when component mounts OR when currentValue changes
+  React.useEffect(() => {
+    if (textareaRef.current) {
+      textareaRef.current.value = currentValue || '';
+    }
+  }, [currentValue, indicatorPath]);
+  
+  const handleBlur = (e) => {
+    const newValue = e.target.value;
+    if (onRemarkChange) {
+      onRemarkChange(indicatorPath, newValue);
+    }
+  };
+  
+  const stopPropagation = (e) => {
+    e.stopPropagation();
+  };
+  
+  return (
+    <div 
+      style={{
+        marginTop: "4px",
+        padding: "4px",
+        backgroundColor: "#fafafa",
+        borderRadius: "4px",
+        borderLeft: "3px solid #730101"
+      }}
+    >
+      <textarea
+        ref={textareaRef}
+        placeholder={placeholder || "Add PO remark for this indicator..."}
+        rows="1"
+        onBlur={handleBlur}
+        onMouseDown={stopPropagation}
+        onMouseUp={stopPropagation}
+        onClick={stopPropagation}
+        onKeyDown={stopPropagation}
+        style={{
+          width: "100%",
+          padding: "4px 8px",
+          border: "1px solid #ffffff",
+          borderRadius: "4px",
+          fontSize: "11px",
+          resize: "vertical",
+          fontFamily: "inherit",
+          backgroundColor: "#fffef7",
+          pointerEvents: "auto",
+          outline: "none",
+          lineHeight: "1.3"
+        }}
+      />
+    </div>
+  );
+};
+
 // Helper function to compress objects with long keys
 const compressObject = (obj) => {
   if (!obj || typeof obj !== 'object') return obj;
@@ -335,9 +412,35 @@ useEffect(() => {
     return false;
   };
 
-  const handleTabChange = (tabId) => {
-    setActiveTab(tabId);
-  };
+const handleTabChange = (tabId) => {
+  setActiveTab(tabId);
+  // Force reload of remarks for this tab
+  const lgu = lguAnswers[0];
+  if (lgu && lgu.poRemarks) {
+    let remarksToLoad = lgu.poRemarks;
+    if (remarksToLoad && remarksToLoad.__keyMap) {
+      remarksToLoad = decompressObject(remarksToLoad);
+    }
+    setIndicatorRemarks(prev => ({
+      ...prev,
+      [tabId]: remarksToLoad
+    }));
+    console.log("📝 Reloaded PO remarks for tab:", tabId, remarksToLoad);
+  }
+  
+  // Also check forwardedAssessment
+  if (forwardedAssessment && forwardedAssessment.poRemarks) {
+    let remarksToLoad = forwardedAssessment.poRemarks;
+    if (remarksToLoad && remarksToLoad.__keyMap) {
+      remarksToLoad = decompressObject(remarksToLoad);
+    }
+    setIndicatorRemarks(prev => ({
+      ...prev,
+      [tabId]: remarksToLoad
+    }));
+    console.log("📝 Reloaded PO remarks from forwardedAssessment for tab:", tabId);
+  }
+};
 
 // Helper function to convert image to base64
 const getBase64Image = (img) => {
@@ -1413,8 +1516,9 @@ const handleVerifyAssessment = async () => {
       const currentData = snapshot.val();
       lguUidForNotification = currentData._metadata?.uid;
       
-      // Create NEW metadata with verified flags only
-      const updatedMetadata = {
+   const compressedIndicatorRemarks = compressObject(indicatorRemarks[activeTab] || {});
+
+const updatedMetadata = {
         // Keep essential user info
         uid: currentData._metadata?.uid,
         email: currentData._metadata?.email,
@@ -1428,7 +1532,8 @@ const handleVerifyAssessment = async () => {
         verifiedAt: Date.now(),
         verifiedBy: auth.currentUser?.email,
         verifiedByName: profileData.name || auth.currentUser?.email,
-        remarks: currentTabRemark || "Assessment verified"
+        remarks: currentTabRemark || "Assessment verified",
+        poRemarks: compressedIndicatorRemarks
       };
       
       const updatedData = {
@@ -1628,107 +1733,113 @@ useEffect(() => {
     try {
       setLoading(true);
       
-      // Get the municipality and LGU name from state
       const municipality = location.state.municipality;
       const lguName = location.state.lguName || municipality;
       const cleanName = `${lguName.replace(/[.#$\[\]]/g, '_')}_${selectedAssessmentId}`;
       
       console.log("Loading assessment for:", lguName);
       
-   // ===== STEP 1: ALWAYS LOAD ATTACHMENTS FROM FIREBASE FIRST =====
-let attachmentsByIndicator = {};
-try {
-  // Use UID-based path for attachments if available
-  let attachmentPath = cleanName;
-  if (location.state?.lguUid) {
-    attachmentPath = `${location.state.lguUid}_${selectedAssessmentId}`;
-    console.log("Using UID-based path for attachments:", attachmentPath);
-  }
-  
-  const attachmentsRef = ref(db, `attachments/${selectedYear}/LGU/${attachmentPath}`);
-  const attachmentsSnapshot = await get(attachmentsRef);
-  
-  if (attachmentsSnapshot.exists()) {
-    const compressedAttachments = attachmentsSnapshot.val();
-    // Decompress the attachments
-    const decompressedAttachments = decompressAttachments(compressedAttachments);
-    console.log("📎 Attachments found:", Object.keys(decompressedAttachments).length);
-    console.log("Attachments were compressed?", !!compressedAttachments.__keyMap);
-    
-    Object.keys(decompressedAttachments).forEach(key => {
-      const attachment = decompressedAttachments[key];
-      
-      // Remove timestamp from the end of the key
-      let keyWithoutTimestamp = key;
-      const lastUnderscoreIndex = key.lastIndexOf('_');
-      if (lastUnderscoreIndex > -1) {
-        const possibleTimestamp = key.substring(lastUnderscoreIndex + 1);
-        if (/^\d+$/.test(possibleTimestamp) && possibleTimestamp.length >= 10) {
-          keyWithoutTimestamp = key.substring(0, lastUnderscoreIndex);
+      // ===== STEP 1: ALWAYS LOAD ATTACHMENTS FROM FIREBASE FIRST =====
+      let attachmentsByIndicator = {};
+      try {
+        let attachmentPath = cleanName;
+        if (location.state?.lguUid) {
+          attachmentPath = `${location.state.lguUid}_${selectedAssessmentId}`;
+          console.log("Using UID-based path for attachments:", attachmentPath);
         }
+        
+        const attachmentsRef = ref(db, `attachments/${selectedYear}/LGU/${attachmentPath}`);
+        const attachmentsSnapshot = await get(attachmentsRef);
+        
+        if (attachmentsSnapshot.exists()) {
+          const compressedAttachments = attachmentsSnapshot.val();
+          const decompressedAttachments = decompressAttachments(compressedAttachments);
+          console.log("📎 Attachments found:", Object.keys(decompressedAttachments).length);
+          
+          Object.keys(decompressedAttachments).forEach(key => {
+            const attachment = decompressedAttachments[key];
+            
+            let keyWithoutTimestamp = key;
+            const lastUnderscoreIndex = key.lastIndexOf('_');
+            if (lastUnderscoreIndex > -1) {
+              const possibleTimestamp = key.substring(lastUnderscoreIndex + 1);
+              if (/^\d+$/.test(possibleTimestamp) && possibleTimestamp.length >= 10) {
+                keyWithoutTimestamp = key.substring(0, lastUnderscoreIndex);
+              }
+            }
+            
+            const indicatorId = keyWithoutTimestamp;
+            
+            if (!attachmentsByIndicator[indicatorId]) {
+              attachmentsByIndicator[indicatorId] = [];
+            }
+            
+            attachmentsByIndicator[indicatorId].push({
+              key: key,
+              name: attachment.fileName || attachment.name || 'Attachment',
+              url: attachment.url || attachment.fileData,
+              fileData: attachment.fileData || attachment.url,
+              fileSize: attachment.fileSize,
+              uploadedAt: attachment.uploadedAt,
+              fileType: attachment.fileType
+            });
+          });
+          
+          console.log("📎 Attachments mapped to indicators:", Object.keys(attachmentsByIndicator).length);
+        } else {
+          console.log("📎 No attachments found for this assessment");
+        }
+      } catch (error) {
+        console.error("Error loading attachments:", error);
       }
-      
-      const indicatorId = keyWithoutTimestamp;
-      
-      if (!attachmentsByIndicator[indicatorId]) {
-        attachmentsByIndicator[indicatorId] = [];
-      }
-      
-      attachmentsByIndicator[indicatorId].push({
-        key: key,
-        name: attachment.fileName || attachment.name || 'Attachment',
-        url: attachment.url || attachment.fileData,
-        fileData: attachment.fileData || attachment.url,
-        fileSize: attachment.fileSize,
-        uploadedAt: attachment.uploadedAt,
-        fileType: attachment.fileType
-      });
-    });
-    
-    console.log("📎 Attachments mapped to indicators:", Object.keys(attachmentsByIndicator).length);
-  } else {
-    console.log("📎 No attachments found for this assessment");
-  }
-} catch (error) {
-  console.error("Error loading attachments:", error);
-}
       
       // ===== STEP 2: LOAD THE ASSESSMENT DATA =====
       let lguData = null;
       
-      // First, check if this is a verified assessment (from state)
-     if (location.state?.isVerified) {
-  console.log("Loading VERIFIED assessment from state");
-  
-  // Use attachments from state if available, otherwise use loaded attachments
-  const verifiedAttachments = location.state.attachmentsByIndicator || attachmentsByIndicator;
-  
-  // Decompress answers if they were compressed
-  const originalData = location.state.data || {};
-  let decompressedData = originalData;
-  
-  if (originalData && originalData.__keyMap) {
-    decompressedData = decompressAnswers(originalData);
-    console.log("Decompressed answers from verified data");
-  }
-  
-  lguData = {
-    id: 1,
-    lguName: lguName,
-    year: selectedYear,
-    assessmentId: selectedAssessmentId,
-    assessment: selectedAssessment,
-    status: "Verified",
-    submission: location.state.submission || new Date().toLocaleDateString(),
-    deadline: location.state.deadline || "Not set",
-    data: decompressedData,
-    municipality: municipality,
-    lguUid: location.state.lguUid,
-    isVerified: true,
-    verifiedBy: location.state.verifiedBy,
-    verifiedAt: location.state.verifiedAt,
-    attachmentsByIndicator: verifiedAttachments
-  };
+      // Check if this is a verified assessment
+      if (location.state?.isVerified) {
+        console.log("Loading VERIFIED assessment from state");
+        
+        const verifiedAttachments = location.state.attachmentsByIndicator || attachmentsByIndicator;
+        
+        let originalData = location.state.data || {};
+        let decompressedData = originalData;
+        
+        if (originalData && originalData.__keyMap) {
+          decompressedData = decompressAnswers(originalData);
+          console.log("Decompressed answers from verified data");
+        }
+        
+        // Load PO remarks from verified state
+        if (location.state.poRemarks) {
+          let verifiedRemarks = location.state.poRemarks;
+          if (verifiedRemarks && verifiedRemarks.__keyMap) {
+            verifiedRemarks = decompressObject(verifiedRemarks);
+          }
+          setIndicatorRemarks(prev => ({
+            ...prev,
+            [activeTab]: verifiedRemarks
+          }));
+          console.log("📝 Loaded PO remarks from verified state:", verifiedRemarks);
+        }
+        
+        lguData = {
+          id: 1,
+          lguName: lguName,
+          year: selectedYear,
+          assessmentId: selectedAssessmentId,
+          assessment: selectedAssessment,
+          status: "Verified",
+          submission: location.state.submission || new Date().toLocaleDateString(),
+          deadline: location.state.deadline || "Not set",
+          data: decompressedData,
+          municipality: municipality,
+          lguUid: location.state.lguUid,
+          isVerified: true,
+          verifiedBy: location.state.verifiedBy,
+          verifiedAt: location.state.verifiedAt,
+          attachmentsByIndicator: verifiedAttachments
+        };
         
         console.log("Verified attachments loaded:", Object.keys(verifiedAttachments).length);
         setLguAnswers([lguData]);
@@ -1739,164 +1850,224 @@ try {
         return;
       }
       
-   // Check if this is a returned assessment (from state)
-if (location.state?.isReturned || location.state?.wasReturned) {
-  console.log("Loading RETURNED assessment from state");
-  
-  // Load the saved remarks back into state
-  if (location.state.poRemarks) {
-    setRemarks(location.state.poRemarks);
-    console.log("📝 Loaded PO remarks from returned assessment:", location.state.poRemarks);
-  }
-  
-  lguData = {
-    id: 1,
-    lguName: lguName,
-    year: selectedYear,
-    assessmentId: selectedAssessmentId,
-    assessment: selectedAssessment,
-    status: "Returned",
-    submission: location.state.submission || new Date().toLocaleDateString(),
-    deadline: location.state.deadline || "Not set",
-    data: location.state.data || {},
-    municipality: municipality,
-    lguUid: location.state.lguUid,
-    isReturned: true,
-    returnedBy: location.state.returnedBy,
-    returnedAt: location.state.returnedAt,
-    poRemarks: location.state.poRemarks,
-    attachmentsByIndicator: attachmentsByIndicator
-  };
-  
-  setLguAnswers([lguData]);
-  setForwardedAssessment(lguData);
-  setIsVerified(false);
-  setIsReturned(true);
-  setLoading(false);
-  return;
-}
+      // Check if this is a returned assessment
+      if (location.state?.isReturned || location.state?.wasReturned) {
+        console.log("Loading RETURNED assessment from state");
+        
+        // Load the saved PO remarks back into state
+        if (location.state.poRemarks) {
+          let loadedRemarks = location.state.poRemarks;
+          if (loadedRemarks && loadedRemarks.__keyMap) {
+            loadedRemarks = decompressObject(loadedRemarks);
+          }
+          setIndicatorRemarks(prev => ({
+            ...prev,
+            [activeTab]: loadedRemarks
+          }));
+          console.log("📝 Loaded PO remarks from returned assessment state:", loadedRemarks);
+        }
+        
+        lguData = {
+          id: 1,
+          lguName: lguName,
+          year: selectedYear,
+          assessmentId: selectedAssessmentId,
+          assessment: selectedAssessment,
+          status: "Returned",
+          submission: location.state.submission || new Date().toLocaleDateString(),
+          deadline: location.state.deadline || "Not set",
+          data: location.state.data || {},
+          municipality: municipality,
+          lguUid: location.state.lguUid,
+          isReturned: true,
+          returnedBy: location.state.returnedBy,
+          returnedAt: location.state.returnedAt,
+          poRemarks: location.state.poRemarks,
+          attachmentsByIndicator: attachmentsByIndicator
+        };
+        
+        setLguAnswers([lguData]);
+        setForwardedAssessment(lguData);
+        setIsVerified(false);
+        setIsReturned(true);
+        setLoading(false);
+        return;
+      }
       
-    // If not verified or returned, load from forwarded node
-console.log("Loading FORWARDED assessment from Firebase");
-const currentUserUid = auth.currentUser.uid;
-const forwardedRef = ref(db, `forwarded/${currentUserUid}`);
-const snapshot = await get(forwardedRef);
+      // Load from forwarded node
+      console.log("Loading FORWARDED assessment from Firebase");
+      const currentUserUid = auth.currentUser.uid;
+      const forwardedRef = ref(db, `forwarded/${currentUserUid}`);
+      const snapshot = await get(forwardedRef);
 
-let foundAssessment = null;
+      let foundAssessment = null;
 
-if (snapshot.exists()) {
-  const forwardedData = snapshot.val();
-  
-  Object.keys(forwardedData).forEach(key => {
-    const item = forwardedData[key];
-    if (item.lguUid === location.state.lguUid && 
-        item.year === selectedYear && 
-        item.assessmentId === selectedAssessmentId) {
-      foundAssessment = item;
-    }
-  });
-}
+      if (snapshot.exists()) {
+        const forwardedData = snapshot.val();
+        
+        Object.keys(forwardedData).forEach(key => {
+          const item = forwardedData[key];
+          if (item.lguUid === location.state.lguUid && 
+              item.year === selectedYear && 
+              item.assessmentId === selectedAssessmentId) {
+            foundAssessment = item;
+          }
+        });
+      }
 
-// If not found in forwarded, check if it's already verified
-if (!foundAssessment) {
-  console.log("Not found in forwarded, checking verified node...");
-  const cleanName = `${location.state.lguUid}_${selectedAssessmentId}`;
-  const verifiedRef = ref(db, `verified/${selectedYear}/LGU/${cleanName}`);
-  const verifiedSnapshot = await get(verifiedRef);
-  
-  if (verifiedSnapshot.exists()) {
-    console.log("Assessment found in verified node! Loading as verified...");
-    const verifiedData = verifiedSnapshot.val();
-    
-    // Load answers from the referenced path
-    let decompressedData = {};
-    if (verifiedData.answersPath) {
-      const answersRef = ref(db, verifiedData.answersPath);
-      const answersSnapshot = await get(answersRef);
-      
-      if (answersSnapshot.exists()) {
-        const data = answersSnapshot.val();
-        const { _metadata, ...answers } = data;
-        if (answers.__keyMap) {
-          decompressedData = decompressAnswers(answers);
-        } else {
-          decompressedData = answers;
+      // If not found in forwarded, check if it's already verified
+      if (!foundAssessment) {
+        console.log("Not found in forwarded, checking verified node...");
+        const cleanName = `${location.state.lguUid}_${selectedAssessmentId}`;
+        const verifiedRef = ref(db, `verified/${selectedYear}/LGU/${cleanName}`);
+        const verifiedSnapshot = await get(verifiedRef);
+        
+        if (verifiedSnapshot.exists()) {
+          console.log("Assessment found in verified node! Loading as verified...");
+          const verifiedData = verifiedSnapshot.val();
+          
+          let decompressedData = {};
+          if (verifiedData.answersPath) {
+            const answersRef = ref(db, verifiedData.answersPath);
+            const answersSnapshot = await get(answersRef);
+            
+            if (answersSnapshot.exists()) {
+              const data = answersSnapshot.val();
+              const { _metadata, ...answers } = data;
+              if (answers.__keyMap) {
+                decompressedData = decompressAnswers(answers);
+              } else {
+                decompressedData = answers;
+              }
+            }
+          }
+          
+          // Load PO remarks from verified data
+          if (verifiedData.poRemarks) {
+            let verifiedRemarks = verifiedData.poRemarks;
+            if (verifiedRemarks && verifiedRemarks.__keyMap) {
+              verifiedRemarks = decompressObject(verifiedRemarks);
+            }
+            setIndicatorRemarks(prev => ({
+              ...prev,
+              [activeTab]: verifiedRemarks
+            }));
+            console.log("📝 Loaded PO remarks from verified node:", verifiedRemarks);
+          }
+          
+          const lguData = {
+            id: 1,
+            lguName: location.state.lguName || location.state.municipality,
+            year: selectedYear,
+            assessmentId: selectedAssessmentId,
+            assessment: verifiedData.assessment || selectedAssessment,
+            status: "Verified",
+            submission: verifiedData.submission || new Date().toLocaleDateString(),
+            deadline: verifiedData.deadline || "Not set",
+            data: decompressedData,
+            municipality: verifiedData.municipality || location.state.municipality,
+            lguUid: location.state.lguUid,
+            isVerified: true,
+            verifiedBy: verifiedData.verifiedBy,
+            verifiedAt: verifiedData.verifiedAt,
+            attachmentsByIndicator: attachmentsByIndicator
+          };
+          
+          setLguAnswers([lguData]);
+          setForwardedAssessment(lguData);
+          setIsVerified(true);
+          setIsReturned(false);
+          setLoading(false);
+          return;
         }
       }
-    }
-    
-    const lguData = {
-      id: 1,
-      lguName: location.state.lguName || location.state.municipality,
-      year: selectedYear,
-      assessmentId: selectedAssessmentId,
-      assessment: verifiedData.assessment || selectedAssessment,
-      status: "Verified",
-      submission: verifiedData.submission || new Date().toLocaleDateString(),
-      deadline: verifiedData.deadline || "Not set",
-      data: decompressedData,
-      municipality: verifiedData.municipality || location.state.municipality,
-      lguUid: location.state.lguUid,
-      isVerified: true,
-      verifiedBy: verifiedData.verifiedBy,
-      verifiedAt: verifiedData.verifiedAt,
-      attachmentsByIndicator: attachmentsByIndicator
-    };
-    
-    setLguAnswers([lguData]);
-    setForwardedAssessment(lguData);
-    setIsVerified(true);
-    setIsReturned(false);
-    setLoading(false);
-    return;
-  }
-}
 
-if (foundAssessment) {
-  // Load PO remarks from the forwarded data (preserved from previous cycles)
-  if (foundAssessment.poRemarks) {
-    setRemarks(foundAssessment.poRemarks);
-    console.log("📝 Loaded PO remarks from forwarded assessment:", foundAssessment.poRemarks);
-  } else if (foundAssessment.originalData?._metadata?.poRemarks) {
-    setRemarks(foundAssessment.originalData._metadata.poRemarks);
-    console.log("📝 Loaded PO remarks from originalData metadata:", foundAssessment.originalData._metadata.poRemarks);
-  }
-  
-  // Decompress answers if they were compressed
-  const originalData = foundAssessment.originalData || {};
-  let decompressedData = originalData;
-  
-  if (originalData && originalData.__keyMap) {
-    decompressedData = decompressAnswers(originalData);
-    console.log("Decompressed answers from forwarded data");
-  }
-  
-  const lguData = {
-    id: 1,
-    lguName: foundAssessment.lguName || municipality,
-    year: foundAssessment.year,
-    assessmentId: foundAssessment.assessmentId,
-    assessment: foundAssessment.assessment,
-    status: foundAssessment.status || "Pending",
-    submission: foundAssessment.submission || new Date().toLocaleDateString(),
-    deadline: location.state?.deadline || foundAssessment.deadline || "Not set",
-    data: decompressedData,
-    municipality: municipality,
-    submittedBy: foundAssessment.submittedBy || "Unknown",
-    forwardedBy: foundAssessment.forwardedBy,
-    forwardedAt: foundAssessment.forwardedAt,
-    lguUid: foundAssessment.lguUid,
-    attachmentsByIndicator: attachmentsByIndicator,
-    poRemarks: foundAssessment.poRemarks || foundAssessment.originalData?._metadata?.poRemarks || null
-  };
-  
-  console.log("Forwarded assessment attachments loaded:", Object.keys(attachmentsByIndicator).length);
-  setLguAnswers([lguData]);
-  setForwardedAssessment(foundAssessment);
-  setIsVerified(false);
-} else {
-  alert("No assessment data found.");
-}
+      if (foundAssessment) {
+        // CRITICAL FIX: Load PO remarks from multiple possible locations
+        let loadedRemarks = {};
+        
+        // Check foundAssessment.poRemarks
+        if (foundAssessment.poRemarks) {
+          let remarksData = foundAssessment.poRemarks;
+          if (remarksData && remarksData.__keyMap) {
+            remarksData = decompressObject(remarksData);
+          }
+          loadedRemarks = { ...loadedRemarks, ...remarksData };
+          console.log("📝 Loaded from foundAssessment.poRemarks");
+        }
+        
+        // Check foundAssessment.indicatorRemarksRaw
+        if (foundAssessment.indicatorRemarksRaw) {
+          loadedRemarks = { ...loadedRemarks, ...foundAssessment.indicatorRemarksRaw };
+          console.log("📝 Loaded from foundAssessment.indicatorRemarksRaw");
+        }
+        
+        // Check originalData metadata
+        if (foundAssessment.originalData?._metadata?.poRemarks) {
+          let metaRemarks = foundAssessment.originalData._metadata.poRemarks;
+          if (metaRemarks && metaRemarks.__keyMap) {
+            metaRemarks = decompressObject(metaRemarks);
+          }
+          loadedRemarks = { ...loadedRemarks, ...metaRemarks };
+          console.log("📝 Loaded from originalData._metadata.poRemarks");
+        }
+        
+        // Check originalData metadata indicatorRemarksRaw
+        if (foundAssessment.originalData?._metadata?.indicatorRemarksRaw) {
+          loadedRemarks = { ...loadedRemarks, ...foundAssessment.originalData._metadata.indicatorRemarksRaw };
+          console.log("📝 Loaded from originalData._metadata.indicatorRemarksRaw");
+        }
+        
+        // Load from location.state if available
+        if (location.state?.poRemarks) {
+          loadedRemarks = { ...loadedRemarks, ...location.state.poRemarks };
+          console.log("📝 Loaded from location.state.poRemarks");
+        }
+        
+        // Set the loaded remarks to state
+        if (Object.keys(loadedRemarks).length > 0) {
+          setIndicatorRemarks(prev => ({
+            ...prev,
+            [activeTab]: loadedRemarks
+          }));
+          console.log("📝 FINAL loaded PO remarks:", loadedRemarks);
+        }
+        
+        // Decompress answers if they were compressed
+        const originalData = foundAssessment.originalData || {};
+        let decompressedData = originalData;
+        
+        if (originalData && originalData.__keyMap) {
+          decompressedData = decompressAnswers(originalData);
+          console.log("Decompressed answers from forwarded data");
+        }
+        
+        const lguData = {
+          id: 1,
+          lguName: foundAssessment.lguName || municipality,
+          year: foundAssessment.year,
+          assessmentId: foundAssessment.assessmentId,
+          assessment: foundAssessment.assessment,
+          status: foundAssessment.status || "Pending",
+          submission: foundAssessment.submission || new Date().toLocaleDateString(),
+          deadline: location.state?.deadline || foundAssessment.deadline || "Not set",
+          data: decompressedData,
+          municipality: municipality,
+          submittedBy: foundAssessment.submittedBy || "Unknown",
+          forwardedBy: foundAssessment.forwardedBy,
+          forwardedAt: foundAssessment.forwardedAt,
+          lguUid: foundAssessment.lguUid,
+          attachmentsByIndicator: attachmentsByIndicator,
+          poRemarks: loadedRemarks
+        };
+        
+        console.log("Forwarded assessment attachments loaded:", Object.keys(attachmentsByIndicator).length);
+        setLguAnswers([lguData]);
+        setForwardedAssessment(foundAssessment);
+        setIsVerified(false);
+      } else {
+        alert("No assessment data found.");
+      }
       
     } catch (error) {
       console.error("Error loading assessment:", error);
@@ -1912,6 +2083,7 @@ if (foundAssessment) {
     setLoading(false);
   }
 }, [auth.currentUser, selectedYear, selectedAssessmentId, location.state]);
+
 const handleReturnAssessment = async () => {
   if (!lguAnswers.length || !forwardedAssessment) {
     console.log("Missing data:", { 
@@ -1972,8 +2144,9 @@ const handleReturnAssessment = async () => {
       originalAnswers = lgu.data;
     }
     
-    // 1. Save to RETURNED node - FIXED: Store only references, not the actual data
-    const compressedRemarks = compressObject(allTabRemarks);
+    // CRITICAL FIX: Get all indicator remarks for the current tab and preserve them
+    const currentIndicatorRemarks = indicatorRemarks[activeTab] || {};
+    const compressedRemarks = compressObject(currentIndicatorRemarks);
     
     const returnedData = {
       originalLguName: lgu.lguName,
@@ -1985,25 +2158,24 @@ const handleReturnAssessment = async () => {
       returnedAt: Date.now(),
       returnedBy: auth.currentUser?.email,
       returnedByName: profileData.name || auth.currentUser?.email,
-      // Store ONLY references, not the actual data to avoid byte limit
       answersPath: `answers/${selectedYear}/LGU/${cleanLguName}`,
       attachmentsPath: `attachments/${selectedYear}/LGU/${cleanLguName}`,
       submission: lgu.submission,
       deadline: lgu.deadline,
       submittedBy: lgu.submittedBy || forwardedAssessment.submittedBy,
       poRemarks: compressedRemarks,
+      indicatorRemarksRaw: currentIndicatorRemarks,
       currentTabRemark: currentTabRemark,
       status: "returned",
       forwardedBy: forwardedAssessment.forwardedBy,
       forwardedAt: forwardedAssessment.forwardedAt
     };
 
-    // Use UID-based path for returned node
     const returnedRef = ref(db, `returned/${selectedYear}/MLGO/${mlgoUid}/${selectedAssessmentId}`);
     await set(returnedRef, returnedData);
-    console.log("✅ Saved to returned node with references only");
+    console.log("✅ Saved to returned node with PO remarks preserved:", currentIndicatorRemarks);
 
-    // 2. UPDATE answers node
+    // UPDATE answers node
     const answersRef = ref(db, `answers/${selectedYear}/LGU/${cleanLguName}`);
     const answersSnapshot = await get(answersRef);
     let existingMetadata = {};
@@ -2031,6 +2203,7 @@ const handleReturnAssessment = async () => {
       returnedBy: auth.currentUser?.email,
       returnedByName: profileData.name || auth.currentUser?.email,
       poRemarks: compressedRemarks,
+      indicatorRemarksRaw: currentIndicatorRemarks,
       remarks: currentTabRemark || "Assessment returned for revision",
       submitted: false,
       forwarded: false,
@@ -2048,9 +2221,9 @@ const handleReturnAssessment = async () => {
     };
 
     await set(answersRef, answersData);
-    console.log("✅ Updated answers node");
+    console.log("✅ Updated answers node with PO remarks in metadata");
 
-    // 3. DELETE FROM FORWARDED NODE
+    // DELETE FROM FORWARDED NODE
     const forwardedRef = ref(db, `forwarded/${auth.currentUser.uid}`);
     const forwardedSnapshot = await get(forwardedRef);
 
@@ -2073,7 +2246,7 @@ const handleReturnAssessment = async () => {
       }
     }
     
-    // 4. Create notification for MLGO
+    // Create notification for MLGO
     const notificationReturnId = Date.now().toString();
     const notificationReturnData = {
       id: notificationReturnId,
@@ -2091,12 +2264,13 @@ const handleReturnAssessment = async () => {
       lguUid: mlgoUid,
       municipality: lgu.municipality,
       poRemarks: compressedRemarks,
+      indicatorRemarksRaw: currentIndicatorRemarks,
       currentTabRemark: currentTabRemark,
       action: "view_returned_assessment"
     };
     
     await set(ref(db, `notifications/${selectedYear}/MLGO/${mlgoUid}/${notificationReturnId}`), notificationReturnData);
-    console.log("✅ Notification created for MLGO");
+    console.log("✅ Notification created for MLGO with PO remarks");
     
     setIsReturned(true);
     alert("Assessment returned to MLGO successfully.");
@@ -2107,6 +2281,7 @@ const handleReturnAssessment = async () => {
         year: selectedYear,
         assessmentId: selectedAssessmentId,
         lguUid: mlgoUid,
+        poRemarks: currentIndicatorRemarks,
         refreshNeeded: true
       } 
     });
@@ -2118,8 +2293,6 @@ const handleReturnAssessment = async () => {
     setLoading(false);
   }
 };
-
-
 
   useEffect(() => {
     if (!auth.currentUser) return;
@@ -2229,6 +2402,34 @@ useEffect(() => {
 
   fetchDeadline();
 }, [adminUid, selectedYear, selectedAssessmentId]); // Added selectedAssessmentId dependency
+
+// Watch for forwardedAssessment changes and reload PO remarks
+useEffect(() => {
+  if (forwardedAssessment && forwardedAssessment.poRemarks && activeTab) {
+    let remarksToLoad = forwardedAssessment.poRemarks;
+    if (remarksToLoad && remarksToLoad.__keyMap) {
+      remarksToLoad = decompressObject(remarksToLoad);
+    }
+    setIndicatorRemarks(prev => ({
+      ...prev,
+      [activeTab]: remarksToLoad
+    }));
+    console.log("📝 Loaded PO remarks from forwardedAssessment:", remarksToLoad);
+  }
+  
+  // Also check for poRemarks in lguAnswers
+  if (lguAnswers[0] && lguAnswers[0].poRemarks && activeTab) {
+    let remarksToLoad = lguAnswers[0].poRemarks;
+    if (remarksToLoad && remarksToLoad.__keyMap) {
+      remarksToLoad = decompressObject(remarksToLoad);
+    }
+    setIndicatorRemarks(prev => ({
+      ...prev,
+      [activeTab]: remarksToLoad
+    }));
+    console.log("📝 Loaded PO remarks from lguAnswers:", remarksToLoad);
+  }
+}, [forwardedAssessment, lguAnswers, activeTab]);
 
   useEffect(() => {
     if (!auth.currentUser) return;
@@ -2730,7 +2931,7 @@ useEffect(() => {
                               currentTabIndicators.map((record) => (
                                 <div key={record.firebaseKey} className="reference-wrapper">
                                   
-                                  {record.mainIndicators?.map((main, index) => {
+                  {record.mainIndicators?.map((main, index) => {
   const radioKey = getAnswerKey(record, index, main.title, false, null, "radio");
   const baseKey = getAnswerKey(record, index, main.title);
   const answer = lgu.data?.[radioKey] ?? lgu.data?.[baseKey];
@@ -3034,9 +3235,69 @@ if (indicatorAttachments.length === 0) {
     </div>
   </div>
 )}
-                                      </div>
-                                    );
-                                  })}
+                                      
+                                                                           {/* ===== PO REMARK DISPLAY (READ ONLY FOR VERIFIED) ===== */}
+                                      {isVerified ? (
+                                        (() => {
+                                          const remarkValue = indicatorRemarks[activeTab]?.[getIndicatorPath(record, index)] || "";
+                                          if (!remarkValue) return null;
+                                          return (
+                                            <div 
+                                              style={{
+                                                marginTop: "4px",
+                                                padding: "6px 10px",
+                                                backgroundColor: "#e8f5e9",
+                                                borderRadius: "4px",
+                                                borderLeft: "3px solid #006736",
+                                                fontSize: "11px"
+                                              }}
+                                            >
+                                              <div style={{
+                                                display: "flex",
+                                                alignItems: "center",
+                                                gap: "6px",
+                                                marginBottom: "4px",
+                                                fontWeight: "bold",
+                                                color: "#006736",
+                                                fontSize: "11px"
+                                              }}>
+                                                <span>📝</span>
+                                                <span>PO Remark:</span>
+                                              </div>
+                                              <div style={{
+                                                fontStyle: "italic",
+                                                color: "#333",
+                                                whiteSpace: "pre-wrap",
+                                                wordBreak: "break-word",
+                                                fontSize: "11px",
+                                                lineHeight: "1.4"
+                                              }}>
+                                                {remarkValue}
+                                              </div>
+                                            </div>
+                                          );
+                                        })()
+                                      ) : (
+                                        <IndicatorRemarkEditor
+                                          tabId={activeTab}
+                                          indicatorPath={getIndicatorPath(record, index)}
+                                          placeholder="📝 Add PO remark for this indicator..."
+                                          onRemarkChange={(path, remark) => {
+                                            setIndicatorRemarks(prev => ({
+                                              ...prev,
+                                              [activeTab]: {
+                                                ...prev[activeTab],
+                                                [path]: remark
+                                              }
+                                            }));
+                                          }}
+                                          currentValue={indicatorRemarks[activeTab]?.[getIndicatorPath(record, index)] || ""}
+                                        />
+                                      )}
+                                    </div>
+                                  );
+                                })}
+                        
 
 {/* Sub Indicators */}
 {record.subIndicators?.map((sub, index) => {
@@ -3292,6 +3553,66 @@ if (subIndicatorAttachments.length === 0) {
           </div>
         </div>
       )}
+      
+          {/* ===== PO REMARK DISPLAY (READ ONLY FOR VERIFIED) ===== */}
+      {isVerified ? (
+        (() => {
+          const remarkValue = indicatorRemarks[activeTab]?.[getIndicatorPath(record, null, index)] || "";
+          if (!remarkValue) return null;
+          return (
+            <div 
+              style={{
+                marginTop: "4px",
+                padding: "6px 10px",
+                backgroundColor: "#e8f5e9",
+                borderRadius: "4px",
+                borderLeft: "3px solid #006736",
+                fontSize: "11px"
+              }}
+            >
+              <div style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "6px",
+                marginBottom: "4px",
+                fontWeight: "bold",
+                color: "#006736",
+                fontSize: "11px"
+              }}>
+                <span>📝</span>
+                <span>PO Remark:</span>
+              </div>
+              <div style={{
+                fontStyle: "italic",
+                color: "#333",
+                whiteSpace: "pre-wrap",
+                wordBreak: "break-word",
+                fontSize: "11px",
+                lineHeight: "1.4"
+              }}>
+                {remarkValue}
+              </div>
+            </div>
+          );
+        })()
+      ) : (
+        <IndicatorRemarkEditor
+          tabId={activeTab}
+          indicatorPath={getIndicatorPath(record, null, index)}
+          placeholder="📝 Add PO remark for this indicator..."
+          onRemarkChange={(path, remark) => {
+            setIndicatorRemarks(prev => ({
+              ...prev,
+              [activeTab]: {
+                ...prev[activeTab],
+                [path]: remark
+              }
+            }));
+          }}
+          currentValue={indicatorRemarks[activeTab]?.[getIndicatorPath(record, null, index)] || ""}
+        />
+      )}
+      
 {sub.nestedSubIndicators && sub.nestedSubIndicators.length > 0 && (
   <div className="nested-reference-wrapper">
     {sub.nestedSubIndicators.map((nested, nestedIndex) => {
@@ -3325,8 +3646,6 @@ if (subIndicatorAttachments.length === 0) {
           }
         });
       }
-      
-      console.log(`Nested indicator "${nested.title}" - Found ${nestedAttachments.length} attachments`);
       
       return (
               <div key={nested.id || nestedIndex} className="nested-reference-item">
@@ -3550,6 +3869,65 @@ if (subIndicatorAttachments.length === 0) {
                     </div>
                   </div>
                 )}
+                
+                             {/* ===== PO REMARK DISPLAY (READ ONLY FOR VERIFIED) ===== */}
+                {isVerified ? (
+                  (() => {
+                    const remarkValue = indicatorRemarks[activeTab]?.[getIndicatorPath(record, null, index, nestedIndex)] || "";
+                    if (!remarkValue) return null;
+                    return (
+                      <div 
+                        style={{
+                          marginTop: "4px",
+                          padding: "6px 10px",
+                          backgroundColor: "#e8f5e9",
+                          borderRadius: "4px",
+                          borderLeft: "3px solid #006736",
+                          fontSize: "11px"
+                        }}
+                      >
+                        <div style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "6px",
+                          marginBottom: "4px",
+                          fontWeight: "bold",
+                          color: "#006736",
+                          fontSize: "11px"
+                        }}>
+                          <span>📝</span>
+                          <span>PO Remark:</span>
+                        </div>
+                        <div style={{
+                          fontStyle: "italic",
+                          color: "#333",
+                          whiteSpace: "pre-wrap",
+                          wordBreak: "break-word",
+                          fontSize: "11px",
+                          lineHeight: "1.4"
+                        }}>
+                          {remarkValue}
+                        </div>
+                      </div>
+                    );
+                  })()
+                ) : (
+                  <IndicatorRemarkEditor
+                    tabId={activeTab}
+                    indicatorPath={getIndicatorPath(record, null, index, nestedIndex)}
+                    placeholder="📝 Add PO remark for this indicator..."
+                    onRemarkChange={(path, remark) => {
+                      setIndicatorRemarks(prev => ({
+                        ...prev,
+                        [activeTab]: {
+                          ...prev[activeTab],
+                          [path]: remark
+                        }
+                      }));
+                    }}
+                    currentValue={indicatorRemarks[activeTab]?.[getIndicatorPath(record, null, index, nestedIndex)] || ""}
+                  />
+                )}
               </div>
             );
           })}
@@ -3576,36 +3954,7 @@ if (subIndicatorAttachments.length === 0) {
                       </div>
                     )}
 
-       {/* Remarks Section */}
-<div style={{
-  marginTop: "20px",
-  padding: "12px 15px",
-  backgroundColor: "#f9f9f9",
-  borderRadius: "6px",
-  border: "1px solid #e0e0e0"
-}}>
-  {/* Add Remarks for Current Tab - Compact */}
-  <div style={{ marginBottom: "10px" }}>
-    <textarea
-      placeholder="Add remarks for MLGOO..."
-      rows="2"
-      value={remarks[activeTab] || ""}
-      onChange={(e) => setRemarks(prev => ({ 
-        ...prev, 
-        [activeTab]: e.target.value 
-      }))}
-      style={{
-        width: "100%",
-        padding: "8px 10px",
-        border: "1px solid #ccc",
-        borderRadius: "4px",
-        fontSize: "12px",
-        resize: "vertical",
-        fontFamily: "inherit"
-      }}
-    />
-  </div>
-</div>
+    
 {/* Flag as Verified Button - Outside the box */}
 <div style={{
   display: "flex",
