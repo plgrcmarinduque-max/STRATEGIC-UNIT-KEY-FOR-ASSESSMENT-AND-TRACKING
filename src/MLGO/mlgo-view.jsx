@@ -1169,6 +1169,7 @@ const handleForwardToPO = async () => {
     await set(answersRef, updatedData);
     console.log("✅ Updated answers node with forwarded metadata");
     
+    
     // Create notification for PO
     const notificationRef = ref(db, `notifications/${selectedYear}/PO/${poUid}`);
     const notificationId = Date.now().toString();
@@ -1387,6 +1388,14 @@ useEffect(() => {
       await set(answersRef, updatedData);
       console.log("✅ Assessment returned to LGU successfully with status: Draft");
       
+      // ===== CRITICAL: DELETE FROM RETURNED NODE TO PREVENT DUPLICATES =====
+const returnedRef = ref(db, `returned/${selectedYear}/MLGO/${auth.currentUser?.uid}/${selectedAssessmentId}`);
+const returnedSnapshot = await get(returnedRef);
+if (returnedSnapshot.exists()) {
+  await set(returnedRef, null);
+  console.log("✅ Removed from returned node to prevent duplicate");
+}
+
       const lguUidFromData = currentData._metadata?.uid;
       const municipality = profileData.municipality || location.state?.municipality;
 

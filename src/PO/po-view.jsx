@@ -2855,7 +2855,7 @@ useEffect(() => {
         }}
       >
         <span>↩</span>
-        {isReturned ? "Returned to MLGO" : "Return to MLGO"}
+        {isReturned ? "Returned to MLGOO" : "Return to MLGOO"}
       </button>
     </div>
 
